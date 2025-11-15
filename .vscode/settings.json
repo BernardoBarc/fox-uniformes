@@ -1,0 +1,4 @@
+{
+    "emulator.emulatorPath": "F:\\flutter\\packages\\flutter_tools\\lib\\src\\ios\\ios_emulators.dart\\emulator\" -list-avds",
+    "emulator.emulatorPathWindows": "F:\\flutter\\packages\\flutter_tools\\lib\\src\\ios\\ios_emulators.dart\\emulator\" -list-avds"
+}
