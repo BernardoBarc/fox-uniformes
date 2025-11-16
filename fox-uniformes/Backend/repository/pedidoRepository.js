@@ -1,4 +1,4 @@
-import pedido from '../models/pedidoModel.js';
+import pedido from '../models/pedido.js';
 
 const getPedido = async (id) => {
     try {
