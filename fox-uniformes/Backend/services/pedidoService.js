@@ -1,4 +1,4 @@
-import pedidoRepository from '../repositories/pedidoRepository.js';
+import pedidoRepository from '../repository/pedidoRepository.js';
 
 const getPedido = async (id) => {
     return await pedidoRepository.getPedido(id);
@@ -8,12 +8,12 @@ const getAllPedidos = async () => {
     return await pedidoRepository.getAllPedidos();
 };
 
-const savePedido = async ({cliente, produtos, total}) => {
-    return await pedidoRepository.savePedido({cliente, produtos, total});
+const savePedido = async ({nomeCliente, produtoId, quantidade, status, preco, entrega}) => {
+    return await pedidoRepository.savePedido({nomeCliente, produtoId, quantidade, status, preco, entrega});
 };
 
-const updatePedido = async (id, {cliente, produtos, total}) => {
-    return await pedidoRepository.updatePedido(id, {cliente, produtos, total});
+const updatePedido = async (id, {nomeCliente, produtoId, quantidade, status, preco, entrega}) => {
+    return await pedidoRepository.updatePedido(id, {nomeCliente, produtoId, quantidade, status, preco, entrega});
 };
 
 const deletePedido = async (id) => {
