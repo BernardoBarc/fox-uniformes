@@ -27,6 +27,10 @@ const pedidoSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    photo: {
+        type: String,
+        required: false
+    },
     createdAt: {
         type: Date,
         default: Date.now
