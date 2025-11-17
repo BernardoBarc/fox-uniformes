@@ -8,12 +8,12 @@ const getAllPedidos = async () => {
     return await pedidoRepository.getAllPedidos();
 };
 
-const savePedido = async ({nomeCliente, produtoId, quantidade, status, preco, entrega}) => {
-    return await pedidoRepository.savePedido({nomeCliente, produtoId, quantidade, status, preco, entrega});
+const savePedido = async ({nomeCliente, produtoId, quantidade, status, preco, entrega, photo}) => {
+    return await pedidoRepository.savePedido({nomeCliente, produtoId, quantidade, status, preco, entrega, photo});
 };
 
-const updatePedido = async (id, {nomeCliente, produtoId, quantidade, status, preco, entrega}) => {
-    return await pedidoRepository.updatePedido(id, {nomeCliente, produtoId, quantidade, status, preco, entrega});
+const updatePedido = async (id, {nomeCliente, produtoId, quantidade, status, preco, entrega, photo}) => {
+    return await pedidoRepository.updatePedido(id, {nomeCliente, produtoId, quantidade, status, preco, entrega, photo});
 };
 
 const deletePedido = async (id) => {
