@@ -16,9 +16,9 @@ const getAllPedidos = async () => {
     }
 }
 
-const savePedido = async ({nomeCliente, produtoId, quantidade, status, preco, entrega}) => {
+const savePedido = async ({nomeCliente, produtoId, quantidade, status, preco, entrega, photo}) => {
     try {
-        const newPedido = new pedido({nomeCliente, produtoId, quantidade, status, preco, entrega});
+        const newPedido = new pedido({nomeCliente, produtoId, quantidade, status, preco, entrega, photo});
         await newPedido.save();
         return newPedido;
     } catch (error) {
@@ -26,9 +26,9 @@ const savePedido = async ({nomeCliente, produtoId, quantidade, status, preco, en
     }
 }
 
-const updatePedido = async (id, {nomeCliente, produtoId, quantidade, status, preco, entrega}) => {
+const updatePedido = async (id, {nomeCliente, produtoId, quantidade, status, preco, entrega, photo}) => {
     try {
-        const updatedPedido = await pedido.findByIdAndUpdate(id, {nomeCliente, produtoId, quantidade, status, preco, entrega}, {new: true});
+        const updatedPedido = await pedido.findByIdAndUpdate(id, {nomeCliente, produtoId, quantidade, status, preco, entrega, photo}, {new: true});
         return updatedPedido;
     } catch (error) {
         throw new Error(error);
