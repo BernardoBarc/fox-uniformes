@@ -1,7 +1,7 @@
 import pedidoService from "../services/pedidoService.js";
 import express from "express";
 import upload from "../middleware/multer.js";
-import {uploadToCloudinary} from "../middleware/cloudinary.js";
+//import {uploadToCloudinary} from "../middleware/cloudinary.js";
 
 const router = express.Router();
 

@@ -9,7 +9,7 @@ const getAllUsers = async () => {
 };
 
 const saveUser = async ({name, login, dataNascimento, telefone, endereco, role, password}) => {
-    return await userRepository.createUser({name, login, dataNascimento, telefone, endereco, role, password});
+    return await userRepository.saveUser({name, login, dataNascimento, telefone, endereco, role, password});
 };
 
 const updateUser = async (id, {name, login, dataNascimento, telefone, endereco, role, password}) => {
