@@ -16,7 +16,7 @@ router.get('/users', async (req, res) => {
 
 router.get('/users/:id', async (req, res) => {
     try {
-        const user = await userService.getUserById(req.params.id);
+        const user = await userService.getUser(req.params.id);
         if (user) {
             res.json(user);
         } else {
@@ -70,16 +70,13 @@ router.put('/users/:id', async (req, res) => {
 });
 
 router.delete('/users/:id', async (req, res) => {
+    const {id} = req.params;
     try {
-        const deleted = await userService.deleteUser(req.params.id);
-        if (deleted) {
-            res.status(204).send();
-        } else {
-            res.status(404).json({ error: 'Usuário não encontrado' });
-        }
+        await userService.deleteUser(id);
+        res.status(204).send();
     } catch (error) {
-        console.error('Erro ao deletar usuário:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.log(error);
+        res.status(500).send(error);
     }
 });
 

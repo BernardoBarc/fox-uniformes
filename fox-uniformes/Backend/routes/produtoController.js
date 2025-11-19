@@ -52,18 +52,14 @@ router.put('/produtos/:id', async (req, res) => {
 });
 
 router.delete('/produtos/:id', async (req, res) => {
+    const { id } = req.params;
     try {
-        const deleted = await produtoService.deleteProduto(req.params.id);
-        if (deleted) {
-            res.status(204).send();
-        } else {
-            res.status(404).json({ error: 'Produto não encontrado' });
-        }
+        await produtoService.deleteProduto(id);
+        res.status(204).send();
     } catch (error) {
-        console.error('Erro ao deletar produto:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.log(error);
+        res.status(500).send(error);
     }
 });
-
 
 export default router;

@@ -50,15 +50,13 @@ router.put('/trajeto/:id', async (req, res) => {
 });
 
 router.delete('/trajeto/:id', async (req, res) => {
+    const { id } = req.params;
     try {
-        const deleted = await trajetoService.deleteTrajeto(req.params.id);
-        if (!deleted) {
-            return res.status(404).json({ message: 'Trajeto not found' });
-        }
+        await trajetoService.deleteTrajeto(id);
         res.status(204).send();
     } catch (error) {
-        console.error('Error deleting trajeto:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        console.log(error);
+        res.status(500).send(error);
     }
 });
 
