@@ -1,8 +1,31 @@
 import express from 'express';
 import userService from '../services/userService.js';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
+
+// Rota para verificar se o usuário está autenticado
+router.get('/auth/verify', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ authenticated: false, error: 'Token não fornecido' });
+        }
+
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'seu_segredo_jwt_aqui');
+        const user = await userService.getUser(decoded.id);
+        
+        if (user) {
+            res.json({ authenticated: true, user: { id: user._id, login: user.login, role: user.role } });
+        } else {
+            res.status(401).json({ authenticated: false, error: 'Usuário não encontrado' });
+        }
+    } catch (error) {
+        res.status(401).json({ authenticated: false, error: 'Token inválido' });
+    }
+});
 
 router.get('/users', async (req, res) => {
     try {
@@ -43,9 +66,15 @@ router.post('/users/login', async (req, res) => {
     try {
         const { login, password } = req.body;
 
-        const user = await userService.getUserByLogin(login);
+        const user = await userService.findByLogin(login);
         if (user && await bcrypt.compare(password, user.password)) {
-            res.json({ message: 'Login bem-sucedido' });
+            // Gerar token JWT
+            const token = jwt.sign(
+                { id: user._id, login: user.login, role: user.role },
+                process.env.JWT_SECRET || 'seu_segredo_jwt_aqui',
+                { expiresIn: '24h' }
+            );
+            res.json({ message: 'Login bem-sucedido', token, user: { id: user._id, login: user.login, role: user.role } });
         } else {
             res.status(401).json({ error: 'Credenciais inválidas' });
         }

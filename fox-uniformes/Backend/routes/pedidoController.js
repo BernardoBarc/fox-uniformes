@@ -1,7 +1,7 @@
 import pedidoService from "../services/pedidoService.js";
 import express from "express";
 import upload from "../middleware/multer.js";
-//import {uploadToCloudinary} from "../middleware/cloudinary.js";
+import {uploadToCloudinary} from "../middleware/multer.js";
 
 const router = express.Router();
 
@@ -28,7 +28,7 @@ router.get("/pedidos/:id", async (req, res) => {
 
 router.post("/pedidos", upload.single("photo"), async (req, res) => {
     try {
-        let imagemUrl = null;
+        let imagemUrl = undefined;
 
         if (req.file) {
             imagemUrl = await uploadToCloudinary(req.file.path);
