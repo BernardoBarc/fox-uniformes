@@ -8,12 +8,16 @@ const getAllPedidos = async () => {
     return await pedidoRepository.getAllPedidos();
 };
 
-const savePedido = async ({nomeCliente, produtoId, quantidade, status, preco, entrega, photo}) => {
-    return await pedidoRepository.savePedido({nomeCliente, produtoId, quantidade, status, preco, entrega, photo});
+const getPedidosByVendedor = async (vendedorId) => {
+    return await pedidoRepository.getPedidosByVendedor(vendedorId);
 };
 
-const updatePedido = async (id, {nomeCliente, produtoId, quantidade, status, preco, entrega, photo}) => {
-    return await pedidoRepository.updatePedido(id, {nomeCliente, produtoId, quantidade, status, preco, entrega, photo});
+const savePedido = async (pedidoData) => {
+    return await pedidoRepository.savePedido(pedidoData);
+};
+
+const updatePedido = async (id, pedidoData) => {
+    return await pedidoRepository.updatePedido(id, pedidoData);
 };
 
 const deletePedido = async (id) => {
@@ -23,6 +27,7 @@ const deletePedido = async (id) => {
 const pedidoService = {
     getPedido,
     getAllPedidos,
+    getPedidosByVendedor,
     savePedido,
     updatePedido,
     deletePedido

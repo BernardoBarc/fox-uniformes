@@ -8,12 +8,16 @@ const getAllTrajetos = async () => {
     return await trajetoRepository.getAllTrajetos();
 };
 
-const saveTrajeto = async ({nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia}) => {
-    return await trajetoRepository.saveTrajeto({nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia});
+const getTrajetosByVendedor = async (vendedorId) => {
+    return await trajetoRepository.getTrajetosByVendedor(vendedorId);
 };
 
-const updateTrajeto = async (id, {nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia}) => {
-    return await trajetoRepository.updateTrajeto(id, {nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia});
+const saveTrajeto = async (trajetoData) => {
+    return await trajetoRepository.saveTrajeto(trajetoData);
+};
+
+const updateTrajeto = async (id, trajetoData) => {
+    return await trajetoRepository.updateTrajeto(id, trajetoData);
 };
 
 const deleteTrajeto = async (id) => {
@@ -23,6 +27,7 @@ const deleteTrajeto = async (id) => {
 const trajetoService = {
     getTrajeto,
     getAllTrajetos,
+    getTrajetosByVendedor,
     saveTrajeto,
     updateTrajeto,
     deleteTrajeto

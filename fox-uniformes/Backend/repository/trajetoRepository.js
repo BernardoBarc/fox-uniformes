@@ -10,16 +10,25 @@ const getTrajeto = async (id) => {
 
 const getAllTrajetos = async () => {
     try {
-        const trajetos = await trajeto.find();
+        const trajetos = await trajeto.find().populate('vendedorId', 'name login');
         return trajetos;
     } catch (error) {
         throw new Error(error);
     }
 }
 
-const saveTrajeto = async ({nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia}) => {
+const getTrajetosByVendedor = async (vendedorId) => {
     try {
-        const newTrajeto = new trajeto({nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia});
+        const trajetos = await trajeto.find({ vendedorId }).populate('vendedorId', 'name login');
+        return trajetos;
+    } catch (error) {
+        throw new Error(error);
+    }
+}
+
+const saveTrajeto = async (trajetoData) => {
+    try {
+        const newTrajeto = new trajeto(trajetoData);
         await newTrajeto.save();
         return newTrajeto;
     } catch (error) {
@@ -27,9 +36,9 @@ const saveTrajeto = async ({nomeCliente, cidade, estado, rua, cep, complemento, 
     }
 }
 
-const updateTrajeto = async (id, {nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia}) => {
+const updateTrajeto = async (id, trajetoData) => {
     try {
-        const updatedTrajeto = await trajeto.findByIdAndUpdate(id, {nomeCliente, cidade, estado, rua, cep, complemento, bairro, pontoReferencia}, {new: true});
+        const updatedTrajeto = await trajeto.findByIdAndUpdate(id, trajetoData, {new: true});
         return updatedTrajeto;
     } catch (error) {
         throw new Error(error);
@@ -47,6 +56,7 @@ const deleteTrajeto = async (id) => {
 const trajetoRepository = {
     getTrajeto,
     getAllTrajetos,
+    getTrajetosByVendedor,
     saveTrajeto,
     updateTrajeto,
     deleteTrajeto

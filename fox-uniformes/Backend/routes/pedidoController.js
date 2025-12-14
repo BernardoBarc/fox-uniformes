@@ -1,13 +1,22 @@
 import pedidoService from "../services/pedidoService.js";
 import express from "express";
 import upload from "../middleware/multer.js";
-import {uploadToCloudinary} from "../middleware/multer.js";
 
 const router = express.Router();
 
 router.get("/pedidos", async (req, res) => {
     try {
         const pedidos = await pedidoService.getAllPedidos();
+        res.json(pedidos);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Buscar pedidos por vendedor
+router.get("/pedidos/vendedor/:vendedorId", async (req, res) => {
+    try {
+        const pedidos = await pedidoService.getPedidosByVendedor(req.params.vendedorId);
         res.json(pedidos);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -31,7 +40,8 @@ router.post("/pedidos", upload.single("photo"), async (req, res) => {
         let imagemUrl = undefined;
 
         if (req.file) {
-            imagemUrl = await uploadToCloudinary(req.file.path);
+            // Salva o caminho local da imagem
+            imagemUrl = `/uploads/${req.file.filename}`;
         }
 
         const dadosPedido = {
@@ -48,18 +58,14 @@ router.post("/pedidos", upload.single("photo"), async (req, res) => {
 
 router.put("/pedidos/:id", upload.single("photo"), async (req, res) => {
     try {
-        let imagemUrl = undefined;
+        let updateData = { ...req.body };
 
         if (req.file) {
-            imagemUrl = await uploadToCloudinary(req.file.path);
+            // Salva o caminho local da imagem
+            updateData.photo = `/uploads/${req.file.filename}`;
         }
 
-        const dadosPedido = {
-            ...req.body,
-            photo: imagemUrl
-        }
-
-        const updatedPedido = await pedidoService.updatePedido(req.params.id, dadosPedido);
+        const updatedPedido = await pedidoService.updatePedido(req.params.id, updateData);
         if (!updatedPedido) {
             return res.status(404).json({ error: "Pedido não encontrado" });
         }

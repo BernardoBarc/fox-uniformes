@@ -5,6 +5,16 @@ const pedidoSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    clienteId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Cliente',
+        required: false
+    },
+    vendedorId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     produtoId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Produto',
@@ -28,6 +38,10 @@ const pedidoSchema = new mongoose.Schema({
         required: true
     },
     photo: {
+        type: String,
+        required: false
+    },
+    observacoes: {
         type: String,
         required: false
     },

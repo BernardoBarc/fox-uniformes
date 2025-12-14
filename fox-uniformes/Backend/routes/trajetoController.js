@@ -26,6 +26,17 @@ router.get('/trajetos', async (req, res) => {
     }
 });
 
+// Buscar trajetos por vendedor
+router.get('/trajetos/vendedor/:vendedorId', async (req, res) => {
+    try {
+        const trajetos = await trajetoService.getTrajetosByVendedor(req.params.vendedorId);
+        res.json(trajetos);
+    } catch (error) {
+        console.error('Error fetching trajetos by vendedor:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 router.post('/trajeto', async (req, res) => {
     try {
         const newTrajeto = await trajetoService.saveTrajeto(req.body);

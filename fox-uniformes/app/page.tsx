@@ -10,30 +10,41 @@ export default function loginPage() {
   const [error, setError] = useState<string | null>(null);
 
   const isAuthenticatedUser = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setIsAuthenticated(false);
-        return;
-      }
+    const token = localStorage.getItem("token");
+    
+    // Se não tem token, não precisa verificar
+    if (!token) {
+      setIsAuthenticated(false);
+      return;
+    }
 
+    try {
       const response = await fetch("http://localhost:5000/auth/verify", {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        credentials: "include",
       });
 
       if (response.ok) {
+        const data = await response.json();
         setIsAuthenticated(true);
-        router.push("/dashboard");
+        // Redirecionar baseado no role
+        if (data.user.role === "admin") {
+          router.push("/admin");
+        } else {
+          router.push("/dashboard");
+        }
       } else {
+        // Token inválido, remove do localStorage
+        localStorage.removeItem("token");
         setIsAuthenticated(false);
       }
     } catch (error) {
+      // Servidor offline ou erro de rede - não bloqueia o usuário
       console.error("Error checking authentication:", error);
+      setIsAuthenticated(false);
     }
   };
   
@@ -41,13 +52,45 @@ export default function loginPage() {
     isAuthenticatedUser();
   }, []);
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    try {
+      const response = await fetch("http://localhost:5000/users/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ login, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem("token", data.token);
+        // Redirecionar baseado no role
+        if (data.user && data.user.role === "admin") {
+          router.push("/admin");
+        } else {
+          router.push("/dashboard");
+        }
+      } else {
+        setError(data.error || "Erro ao fazer login");
+      }
+    } catch (error) {
+      console.error("Erro ao fazer login:", error);
+      setError("Erro ao conectar com o servidor");
+    }
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
       <header className="mb-8">
         <img src="/next.svg" alt="Logo" className="h-12" />
       </header>
       <h1 className="text-4xl font-bold">Login Page</h1>
-        <form className="flex flex-col gap-4 w-1/3">
+        <form onSubmit={handleLogin} className="flex flex-col gap-4 w-1/3">
           <input
             type="text"
             placeholder="Login"

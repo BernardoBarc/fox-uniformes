@@ -1,37 +1,33 @@
-import cloudinary from "cloudinary";
-import dotenv from "dotenv";
 import multer from "multer";
-
-dotenv.config();
+import path from "path";
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, "uploads/");
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + "-" + file.originalname);
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
     },
 });
 
-const upload = multer({ storage });
+const fileFilter = (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
 
-cloudinary.v2.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-export const uploadToCloudinary = async (filePath) => {
-    try {
-        const result = await cloudinary.v2.uploader.upload(filePath, {
-            folder: "uploads",
-        });
-        return result.secure_url;
-    } catch (error) {
-        console.error("Error uploading to Cloudinary:", error);
-        throw new Error("Cloudinary upload failed");
+    if (extname && mimetype) {
+        return cb(null, true);
+    } else {
+        cb(new Error("Apenas imagens são permitidas (jpeg, jpg, png, gif, webp)"));
     }
 };
+
+const upload = multer({ 
+    storage,
+    fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB max
+});
 
 export { upload };
 export default upload;

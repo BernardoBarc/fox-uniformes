@@ -5,6 +5,11 @@ const trajetoSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    vendedorId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     cidade: {
         type: String,
         required: true
@@ -30,6 +35,15 @@ const trajetoSchema = new mongoose.Schema({
     },
     pontoReferencia: {
         type: String
+    },
+    status: {
+        type: String,
+        enum: ['Pendente', 'Em Andamento', 'Concluído'],
+        default: 'Pendente'
+    },
+    dataVisita: {
+        type: Date,
+        required: false
     },
     createdAt: {
         type: Date,
