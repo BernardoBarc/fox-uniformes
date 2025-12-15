@@ -20,6 +20,7 @@ interface Produto {
 interface Cliente {
   _id: string;
   nome: string;
+  cpf: string;
   email: string;
   telefone: string;
   cidade: string;
@@ -73,6 +74,11 @@ export default function DashboardPage() {
   const [trajetos, setTrajetos] = useState<Trajeto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  
+  // Estados para edição de cliente
+  const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null);
+  const [mostrarModalEdicao, setMostrarModalEdicao] = useState(false);
+  const [erroValidacaoCPF, setErroValidacaoCPF] = useState<string | null>(null);
 
   // Interface para item do carrinho
   interface ItemCarrinho {
@@ -92,8 +98,12 @@ export default function DashboardPage() {
   // Estados para formulários
   const [novoPedido, setNovoPedido] = useState({
     nomeCliente: "",
+    cpfCliente: "",
+    telefoneCliente: "",
     entrega: "",
   });
+  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
   
   // Estados do carrinho
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
@@ -117,6 +127,9 @@ export default function DashboardPage() {
   // Total do carrinho
   const totalCarrinho = carrinho.reduce((acc, item) => acc + item.precoTotal, 0);
 
+  // Pedidos ativos (excluindo cancelados)
+  const pedidosAtivos = pedidos.filter(p => p.status !== "Cancelado");
+
   const [novoTrajeto, setNovoTrajeto] = useState({
     nomeCliente: "",
     cidade: "",
@@ -131,6 +144,7 @@ export default function DashboardPage() {
 
   const [novoCliente, setNovoCliente] = useState({
     nome: "",
+    cpf: "",
     email: "",
     telefone: "",
     cidade: "",
@@ -287,6 +301,123 @@ export default function DashboardPage() {
     setCarrinho(carrinho.filter(item => item.id !== id));
   };
 
+  // Função para formatar CPF
+  const formatarCPF = (valor: string) => {
+    const numeros = valor.replace(/\D/g, "");
+    return numeros
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
+      .substring(0, 14);
+  };
+
+  // Função para validar CPF (algoritmo oficial)
+  const validarCPF = (cpf: string): boolean => {
+    const cpfLimpo = cpf.replace(/\D/g, "");
+    
+    // Verifica se tem 11 dígitos
+    if (cpfLimpo.length !== 11) return false;
+    
+    // Verifica se todos os dígitos são iguais (CPFs inválidos como 111.111.111-11)
+    if (/^(\d)\1+$/.test(cpfLimpo)) return false;
+    
+    // Validação do primeiro dígito verificador
+    let soma = 0;
+    for (let i = 0; i < 9; i++) {
+      soma += parseInt(cpfLimpo.charAt(i)) * (10 - i);
+    }
+    let resto = (soma * 10) % 11;
+    if (resto === 10 || resto === 11) resto = 0;
+    if (resto !== parseInt(cpfLimpo.charAt(9))) return false;
+    
+    // Validação do segundo dígito verificador
+    soma = 0;
+    for (let i = 0; i < 10; i++) {
+      soma += parseInt(cpfLimpo.charAt(i)) * (11 - i);
+    }
+    resto = (soma * 10) % 11;
+    if (resto === 10 || resto === 11) resto = 0;
+    if (resto !== parseInt(cpfLimpo.charAt(10))) return false;
+    
+    return true;
+  };
+
+  // Função para atualizar cliente
+  const handleAtualizarCliente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clienteEditando) return;
+    
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`${API_URL}/clientes/${clienteEditando._id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(clienteEditando),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: "Cliente atualizado com sucesso!" });
+        setMostrarModalEdicao(false);
+        setClienteEditando(null);
+        fetchClientes();
+      } else {
+        const error = await response.json();
+        setMessage({ type: "error", text: error.error || "Erro ao atualizar cliente" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Abrir modal de edição
+  const abrirEdicaoCliente = (cliente: Cliente) => {
+    setClienteEditando({ ...cliente });
+    setMostrarModalEdicao(true);
+  };
+
+  // Função para buscar cliente por CPF
+  const buscarClientePorCPF = async (cpf: string) => {
+    const cpfLimpo = cpf.replace(/\D/g, "");
+    if (cpfLimpo.length !== 11) {
+      setClienteSelecionado(null);
+      return;
+    }
+
+    setBuscandoCliente(true);
+    try {
+      const response = await fetch(`${API_URL}/clientes/cpf/${cpfLimpo}`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        const cliente = await response.json();
+        setClienteSelecionado(cliente);
+        setNovoPedido(prev => ({
+          ...prev,
+          nomeCliente: cliente.nome,
+          telefoneCliente: cliente.telefone,
+        }));
+        setMessage({ type: "success", text: `Cliente encontrado: ${cliente.nome}` });
+      } else {
+        setClienteSelecionado(null);
+        setNovoPedido(prev => ({
+          ...prev,
+          nomeCliente: "",
+          telefoneCliente: "",
+        }));
+      }
+    } catch (error) {
+      console.error("Erro ao buscar cliente:", error);
+      setClienteSelecionado(null);
+    } finally {
+      setBuscandoCliente(false);
+    }
+  };
+
   const handleFinalizarVenda = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -295,8 +426,13 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!novoPedido.nomeCliente || !novoPedido.entrega) {
-      setMessage({ type: "error", text: "Preencha o nome do cliente e a data de entrega!" });
+    if (!novoPedido.nomeCliente || !novoPedido.entrega || !novoPedido.cpfCliente) {
+      setMessage({ type: "error", text: "Preencha o CPF, nome do cliente e a data de entrega!" });
+      return;
+    }
+
+    if (!clienteSelecionado) {
+      setMessage({ type: "error", text: "Cliente não encontrado! Verifique o CPF ou cadastre o cliente primeiro." });
       return;
     }
 
@@ -305,16 +441,20 @@ export default function DashboardPage() {
 
     try {
       // Criar um pedido para cada item do carrinho
+      const pedidosCriados = [];
       for (const item of carrinho) {
         const formData = new FormData();
         formData.append("nomeCliente", novoPedido.nomeCliente);
+        formData.append("cpfCliente", novoPedido.cpfCliente.replace(/\D/g, ""));
+        formData.append("telefoneCliente", novoPedido.telefoneCliente);
+        formData.append("clienteId", clienteSelecionado._id);
         formData.append("produtoId", item.produtoId);
         formData.append("quantidade", item.quantidade.toString());
         formData.append("preco", item.precoTotal.toString());
         formData.append("entrega", novoPedido.entrega);
         formData.append("observacoes", item.observacoes);
         formData.append("vendedorId", userData?.id || "");
-        formData.append("status", "Pendente");
+        formData.append("status", "Aguardando Pagamento");
         
         if (item.foto) {
           formData.append("photo", item.foto);
@@ -332,10 +472,35 @@ export default function DashboardPage() {
           const error = await response.json();
           throw new Error(error.error || "Erro ao criar pedido");
         }
+
+        const pedidoCriado = await response.json();
+        pedidosCriados.push(pedidoCriado);
       }
 
-      setMessage({ type: "success", text: `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso!` });
-      setNovoPedido({ nomeCliente: "", entrega: "" });
+      // Gerar link de pagamento e enviar via WhatsApp
+      try {
+        const pagamentoResponse = await fetch(`${API_URL}/pagamento/criar`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            clienteId: clienteSelecionado._id,
+            pedidos: pedidosCriados.map(p => p._id || p.pedido?._id),
+            valorTotal: totalCarrinho,
+            telefone: novoPedido.telefoneCliente,
+            nomeCliente: novoPedido.nomeCliente,
+          }),
+        });
+
+        if (!pagamentoResponse.ok) {
+          console.warn("Aviso: Link de pagamento não foi gerado, mas pedidos foram criados.");
+        }
+      } catch (pagamentoError) {
+        console.warn("Aviso: Erro ao gerar link de pagamento:", pagamentoError);
+      }
+
+      setMessage({ type: "success", text: `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso! Link de pagamento enviado via WhatsApp.` });
+      setNovoPedido({ nomeCliente: "", cpfCliente: "", telefoneCliente: "", entrega: "" });
+      setClienteSelecionado(null);
       setCarrinho([]);
       fetchPedidos();
       setActiveTab("pedidos");
@@ -382,6 +547,14 @@ export default function DashboardPage() {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+    setErroValidacaoCPF(null);
+
+    // Validar CPF antes de enviar
+    if (!validarCPF(novoCliente.cpf)) {
+      setErroValidacaoCPF("CPF inválido! Por favor, verifique o número digitado.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch("http://localhost:5000/clientes", {
@@ -395,7 +568,7 @@ export default function DashboardPage() {
 
       if (response.ok) {
         setMessage({ type: "success", text: "Cliente cadastrado com sucesso!" });
-        setNovoCliente({ nome: "", email: "", telefone: "", cidade: "", estado: "", rua: "", numero: "", bairro: "", cep: "", complemento: "" });
+        setNovoCliente({ nome: "", cpf: "", email: "", telefone: "", cidade: "", estado: "", rua: "", numero: "", bairro: "", cep: "", complemento: "" });
         fetchClientes();
         setActiveTab("clientes");
       } else {
@@ -436,6 +609,7 @@ export default function DashboardPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Pendente": return "bg-yellow-500";
+      case "Aguardando Pagamento": return "bg-purple-500";
       case "Em Progresso":
       case "Em Andamento": return "bg-blue-500";
       case "Concluído": return "bg-green-500";
@@ -534,8 +708,8 @@ export default function DashboardPage() {
               <h2 className="text-3xl font-bold mb-6">Painel de Controle</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
-                  <h3 className="text-lg text-gray-400">Total de Pedidos</h3>
-                  <p className="text-4xl font-bold text-orange-500">{pedidos.length}</p>
+                  <h3 className="text-lg text-gray-400">Pedidos Ativos</h3>
+                  <p className="text-4xl font-bold text-orange-500">{pedidosAtivos.length}</p>
                 </div>
                 <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
                   <h3 className="text-lg text-gray-400">Rotas Cadastradas</h3>
@@ -551,7 +725,7 @@ export default function DashboardPage() {
               <div className="mt-8">
                 <h3 className="text-xl font-bold mb-4">Pedidos Recentes</h3>
                 <div className="bg-gray-800 rounded-xl overflow-hidden">
-                  {pedidos.slice(0, 5).map((pedido) => (
+                  {pedidosAtivos.slice(0, 5).map((pedido) => (
                     <div key={pedido._id} className="flex justify-between items-center p-4 border-b border-gray-700">
                       <div>
                         <p className="font-semibold">{pedido.nomeCliente}</p>
@@ -562,7 +736,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   ))}
-                  {pedidos.length === 0 && (
+                  {pedidosAtivos.length === 0 && (
                     <p className="p-4 text-gray-400">Nenhum pedido encontrado</p>
                   )}
                 </div>
@@ -588,7 +762,7 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pedidos.map((pedido) => (
+                    {pedidosAtivos.map((pedido) => (
                       <tr key={pedido._id} className="border-b border-gray-700 hover:bg-gray-750">
                         <td className="px-4 py-3">
                           <div>
@@ -627,7 +801,7 @@ export default function DashboardPage() {
                     ))}
                   </tbody>
                 </table>
-                {pedidos.length === 0 && (
+                {pedidosAtivos.length === 0 && (
                   <p className="p-4 text-gray-400 text-center">Nenhum pedido encontrado</p>
                 )}
               </div>
@@ -648,26 +822,108 @@ export default function DashboardPage() {
                     </h3>
                     
                     {/* Informações do Cliente */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 pb-6 border-b border-gray-700">
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Nome do Cliente *</label>
-                        <input
-                          type="text"
-                          value={novoPedido.nomeCliente}
-                          onChange={(e) => setNovoPedido({ ...novoPedido, nomeCliente: e.target.value })}
-                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          placeholder="Digite o nome do cliente"
-                        />
+                    <div className="mb-6 pb-6 border-b border-gray-700">
+                      <h4 className="text-lg font-medium mb-4 text-orange-400">👤 Dados do Cliente</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">CPF do Cliente *</label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={novoPedido.cpfCliente}
+                              onChange={(e) => {
+                                const cpfFormatado = formatarCPF(e.target.value);
+                                setNovoPedido({ ...novoPedido, cpfCliente: cpfFormatado });
+                                if (cpfFormatado.replace(/\D/g, "").length === 11) {
+                                  buscarClientePorCPF(cpfFormatado);
+                                }
+                              }}
+                              className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              placeholder="000.000.000-00"
+                              maxLength={14}
+                            />
+                            {buscandoCliente && (
+                              <div className="absolute right-3 top-2.5">
+                                <div className="animate-spin h-5 w-5 border-2 border-orange-500 rounded-full border-t-transparent"></div>
+                              </div>
+                            )}
+                          </div>
+                          {novoPedido.cpfCliente.replace(/\D/g, "").length === 11 && !clienteSelecionado && !buscandoCliente && (
+                            <p className="text-xs text-red-400 mt-1">
+                              ⚠️ Cliente não encontrado. <button 
+                                type="button" 
+                                onClick={() => setActiveTab("novoCliente")}
+                                className="text-orange-400 underline"
+                              >
+                                Cadastrar novo cliente
+                              </button>
+                            </p>
+                          )}
+                          {clienteSelecionado && (
+                            <p className="text-xs text-green-400 mt-1">✅ Cliente encontrado</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">Nome do Cliente *</label>
+                          <input
+                            type="text"
+                            value={novoPedido.nomeCliente}
+                            onChange={(e) => setNovoPedido({ ...novoPedido, nomeCliente: e.target.value })}
+                            className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                            placeholder="Nome será preenchido automaticamente"
+                            disabled={!!clienteSelecionado}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp) *</label>
+                          <input
+                            type="text"
+                            value={novoPedido.telefoneCliente}
+                            onChange={(e) => setNovoPedido({ ...novoPedido, telefoneCliente: e.target.value })}
+                            className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                            placeholder="(00) 00000-0000"
+                            disabled={!!clienteSelecionado}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">O link de pagamento será enviado para este número</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">Data de Entrega *</label>
+                          <input
+                            type="date"
+                            value={novoPedido.entrega}
+                            onChange={(e) => setNovoPedido({ ...novoPedido, entrega: e.target.value })}
+                            className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Data de Entrega *</label>
-                        <input
-                          type="date"
-                          value={novoPedido.entrega}
-                          onChange={(e) => setNovoPedido({ ...novoPedido, entrega: e.target.value })}
-                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        />
-                      </div>
+                      
+                      {/* Card do Cliente Selecionado */}
+                      {clienteSelecionado && (
+                        <div className="mt-4 p-4 bg-gray-700 rounded-lg border border-green-500/30">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-semibold text-green-400">✅ Cliente Selecionado</p>
+                              <p className="text-sm text-gray-300 mt-1">{clienteSelecionado.nome}</p>
+                              <p className="text-xs text-gray-400">
+                                📞 {clienteSelecionado.telefone} • 📧 {clienteSelecionado.email || "Sem email"}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                📍 {clienteSelecionado.cidade} - {clienteSelecionado.estado}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClienteSelecionado(null);
+                                setNovoPedido({ ...novoPedido, cpfCliente: "", nomeCliente: "", telefoneCliente: "" });
+                              }}
+                              className="text-red-400 hover:text-red-300 text-sm"
+                            >
+                              ✕ Limpar
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Seleção de Produto */}
@@ -880,23 +1136,30 @@ export default function DashboardPage() {
                         {/* Botão Finalizar */}
                         <button
                           onClick={handleFinalizarVenda}
-                          disabled={loading || !novoPedido.nomeCliente || !novoPedido.entrega}
+                          disabled={loading || !clienteSelecionado || !novoPedido.entrega}
                           className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                           {loading ? (
                             "Processando..."
                           ) : (
                             <>
-                              <span>✅</span> Finalizar Venda
+                              <span>✅</span> Finalizar Venda e Enviar Link
                             </>
                           )}
                         </button>
                         
-                        {(!novoPedido.nomeCliente || !novoPedido.entrega) && (
+                        {(!clienteSelecionado || !novoPedido.entrega) && (
                           <p className="text-xs text-yellow-400 mt-2 text-center">
-                            Preencha o cliente e data de entrega
+                            {!clienteSelecionado ? "Informe o CPF do cliente" : "Preencha a data de entrega"}
                           </p>
                         )}
+
+                        {/* Info sobre pagamento */}
+                        <div className="mt-4 p-3 bg-blue-900/30 rounded-lg border border-blue-500/30">
+                          <p className="text-xs text-blue-300">
+                            💳 Ao finalizar, um link de pagamento será enviado via WhatsApp para o cliente com opções de PIX e Cartão de Crédito.
+                          </p>
+                        </div>
                       </>
                     )}
                   </div>
@@ -1047,7 +1310,16 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {clientes.map((cliente) => (
                   <div key={cliente._id} className="bg-gray-800 p-4 rounded-xl">
-                    <h3 className="font-semibold text-lg mb-2">{cliente.nome}</h3>
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-semibold text-lg">{cliente.nome}</h3>
+                      <button
+                        onClick={() => abrirEdicaoCliente(cliente)}
+                        className="text-orange-400 hover:text-orange-300 text-sm px-2 py-1 bg-gray-700 rounded-lg"
+                      >
+                        ✏️ Editar
+                      </button>
+                    </div>
+                    <p className="text-gray-400 text-sm">🆔 CPF: {cliente.cpf || "Não informado"}</p>
                     <p className="text-gray-400 text-sm">📞 {cliente.telefone}</p>
                     {cliente.email && <p className="text-gray-400 text-sm">✉️ {cliente.email}</p>}
                     <p className="text-gray-400 text-sm mt-2">
@@ -1063,6 +1335,159 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Modal de Edição de Cliente */}
+          {mostrarModalEdicao && clienteEditando && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold">✏️ Editar Cliente</h3>
+                  <button
+                    onClick={() => {
+                      setMostrarModalEdicao(false);
+                      setClienteEditando(null);
+                    }}
+                    className="text-gray-400 hover:text-white text-2xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <form onSubmit={handleAtualizarCliente}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm text-gray-400 mb-1">Nome Completo</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.nome}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, nome: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">CPF</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.cpf}
+                        className="w-full bg-gray-600 rounded-lg px-4 py-2 text-gray-400 cursor-not-allowed"
+                        disabled
+                        title="CPF não pode ser alterado"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">CPF não pode ser alterado</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp)</label>
+                      <input
+                        type="tel"
+                        value={clienteEditando.telefone}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, telefone: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={clienteEditando.email || ""}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, email: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Cidade</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.cidade}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, cidade: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Estado</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.estado}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, estado: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Rua</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.rua}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, rua: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Número</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.numero}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, numero: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Bairro</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.bairro}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, bairro: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">CEP</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.cep || ""}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, cep: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Complemento</label>
+                      <input
+                        type="text"
+                        value={clienteEditando.complemento || ""}
+                        onChange={(e) => setClienteEditando({ ...clienteEditando, complemento: e.target.value })}
+                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-4 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMostrarModalEdicao(false);
+                        setClienteEditando(null);
+                      }}
+                      className="flex-1 bg-gray-600 hover:bg-gray-700 py-3 rounded-lg font-semibold transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex-1 bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
+                    >
+                      {loading ? "Salvando..." : "💾 Salvar Alterações"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* Novo Cliente */}
           {activeTab === "novoCliente" && (
             <div>
@@ -1070,7 +1495,7 @@ export default function DashboardPage() {
               <form onSubmit={handleCriarCliente} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Nome Completo</label>
+                    <label className="block text-sm text-gray-400 mb-1">Nome Completo *</label>
                     <input
                       type="text"
                       value={novoCliente.nome}
@@ -1080,14 +1505,49 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Telefone</label>
+                    <label className="block text-sm text-gray-400 mb-1">CPF *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.cpf}
+                      onChange={(e) => {
+                        const cpfFormatado = formatarCPF(e.target.value);
+                        setNovoCliente({ ...novoCliente, cpf: cpfFormatado });
+                        // Validar CPF em tempo real quando tiver 14 caracteres (formato completo)
+                        if (cpfFormatado.length === 14) {
+                          if (!validarCPF(cpfFormatado)) {
+                            setErroValidacaoCPF("CPF inválido!");
+                          } else {
+                            setErroValidacaoCPF(null);
+                          }
+                        } else {
+                          setErroValidacaoCPF(null);
+                        }
+                      }}
+                      className={`w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 ${
+                        erroValidacaoCPF ? "ring-2 ring-red-500 focus:ring-red-500" : "focus:ring-orange-500"
+                      }`}
+                      placeholder="000.000.000-00"
+                      maxLength={14}
+                      required
+                    />
+                    {erroValidacaoCPF && (
+                      <p className="text-xs text-red-500 mt-1">❌ {erroValidacaoCPF}</p>
+                    )}
+                    {novoCliente.cpf.length === 14 && !erroValidacaoCPF && (
+                      <p className="text-xs text-green-500 mt-1">✅ CPF válido</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp) *</label>
                     <input
                       type="tel"
                       value={novoCliente.telefone}
                       onChange={(e) => setNovoCliente({ ...novoCliente, telefone: e.target.value })}
                       className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="(00) 00000-0000"
                       required
                     />
+                    <p className="text-xs text-gray-500 mt-1">Links de pagamento serão enviados para este número</p>
                   </div>
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Email</label>
@@ -1099,7 +1559,7 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Cidade</label>
+                    <label className="block text-sm text-gray-400 mb-1">Cidade *</label>
                     <input
                       type="text"
                       value={novoCliente.cidade}
@@ -1109,7 +1569,7 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Estado</label>
+                    <label className="block text-sm text-gray-400 mb-1">Estado *</label>
                     <input
                       type="text"
                       value={novoCliente.estado}
@@ -1119,7 +1579,7 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Rua</label>
+                    <label className="block text-sm text-gray-400 mb-1">Rua *</label>
                     <input
                       type="text"
                       value={novoCliente.rua}
@@ -1129,7 +1589,7 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Número</label>
+                    <label className="block text-sm text-gray-400 mb-1">Número *</label>
                     <input
                       type="text"
                       value={novoCliente.numero}
@@ -1139,7 +1599,7 @@ export default function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Bairro</label>
+                    <label className="block text-sm text-gray-400 mb-1">Bairro *</label>
                     <input
                       type="text"
                       value={novoCliente.bairro}

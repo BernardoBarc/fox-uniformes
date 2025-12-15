@@ -4,6 +4,7 @@ import trajetoController from "./trajetoController.js";
 import produtoController from "./produtoController.js";
 import pedidoController from "./pedidoController.js";
 import clienteController from "./clienteController.js";
+import pagamentoController from "./pagamentoController.js";
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ router.use(trajetoController);
 router.use(produtoController);
 router.use(pedidoController);
 router.use(clienteController);
+router.use(pagamentoController);
 
 
 

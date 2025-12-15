@@ -12,6 +12,10 @@ const getCliente = async (id) => {
     return await clienteRepository.getCliente(id);
 };
 
+const getClienteByCPF = async (cpf) => {
+    return await clienteRepository.getClienteByCPF(cpf);
+};
+
 const saveCliente = async (clienteData) => {
     return await clienteRepository.saveCliente(clienteData);
 };
@@ -28,6 +32,7 @@ export default {
     getAllClientes,
     getClientesByVendedor,
     getCliente,
+    getClienteByCPF,
     saveCliente,
     updateCliente,
     deleteCliente

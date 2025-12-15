@@ -25,6 +25,22 @@ router.get('/clientes/vendedor/:vendedorId', async (req, res) => {
     }
 });
 
+// Buscar cliente por CPF
+router.get('/clientes/cpf/:cpf', async (req, res) => {
+    try {
+        const cpf = req.params.cpf.replace(/\D/g, ''); // Remove formatação
+        const cliente = await clienteService.getClienteByCPF(cpf);
+        if (cliente) {
+            res.json(cliente);
+        } else {
+            res.status(404).json({ error: 'Cliente não encontrado' });
+        }
+    } catch (error) {
+        console.error('Erro ao buscar cliente por CPF:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+
 // Buscar cliente por ID
 router.get('/clientes/:id', async (req, res) => {
     try {
