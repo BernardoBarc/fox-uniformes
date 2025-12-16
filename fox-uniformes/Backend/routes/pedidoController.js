@@ -23,6 +23,16 @@ router.get("/pedidos/vendedor/:vendedorId", async (req, res) => {
     }
 });
 
+// Buscar pedidos por cliente (para acompanhamento)
+router.get("/pedidos/cliente/:clienteId", async (req, res) => {
+    try {
+        const pedidos = await pedidoService.getPedidosByCliente(req.params.clienteId);
+        res.json(pedidos);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.get("/pedidos/:id", async (req, res) => {
     try {
         const pedido = await pedidoService.getPedido(req.params.id);

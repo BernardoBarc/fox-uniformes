@@ -78,20 +78,25 @@ router.post('/pagamento/criar', async (req, res) => {
 // Confirmar pagamento manualmente (admin)
 router.post('/pagamento/:id/confirmar', async (req, res) => {
     try {
-        const { metodoPagamento } = req.body;
-        const pagamento = await pagamentoService.confirmarPagamentoManual(
+        const { metodoPagamento, parcelas } = req.body;
+        const resultado = await pagamentoService.confirmarPagamentoManual(
             req.params.id, 
-            metodoPagamento || 'PIX'
+            metodoPagamento || 'PIX',
+            parcelas || 1
         );
         
-        if (pagamento) {
-            res.json({ message: 'Pagamento confirmado com sucesso', pagamento });
+        if (resultado) {
+            res.json({ 
+                message: 'Pagamento confirmado com sucesso', 
+                pagamento: resultado.pagamento,
+                notaFiscal: resultado.notaFiscal
+            });
         } else {
             res.status(404).json({ error: 'Pagamento não encontrado' });
         }
     } catch (error) {
         console.error('Erro ao confirmar pagamento:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        res.status(500).json({ error: error.message || 'Erro interno do servidor' });
     }
 });
 

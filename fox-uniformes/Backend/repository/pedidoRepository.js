@@ -24,6 +24,14 @@ const getPedidosByVendedor = async (vendedorId) => {
     }
 }
 
+const getPedidosByCliente = async (clienteId) => {
+    try {
+        return await pedido.find({ clienteId }).populate('produtoId').populate('vendedorId', 'name login');
+    } catch (error) {
+        throw new Error(error);
+    }
+}
+
 const savePedido = async ({nomeCliente, clienteId, vendedorId, produtoId, quantidade, status, preco, entrega, photo, observacoes}) => {
     try {
         const newPedido = new pedido({nomeCliente, clienteId, vendedorId, produtoId, quantidade, status, preco, entrega, photo, observacoes});
@@ -55,6 +63,7 @@ const pedidoRepository = {
     getPedido,
     getAllPedidos,
     getPedidosByVendedor,
+    getPedidosByCliente,
     savePedido,
     updatePedido,
     deletePedido

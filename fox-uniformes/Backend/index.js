@@ -23,6 +23,9 @@ app.use(express.json());
 // Servir arquivos estáticos da pasta uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Servir arquivos de notas fiscais
+app.use('/notas_fiscais', express.static(path.join(__dirname, 'notas_fiscais')));
+
 app.use('/', router);
 
 const PORT = process.env.PORT || 5000;

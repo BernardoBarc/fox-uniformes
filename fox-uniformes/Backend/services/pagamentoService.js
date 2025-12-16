@@ -1,5 +1,8 @@
 import pagamentoRepository from '../repository/pagamentoRepository.js';
 import Pedido from '../models/pedido.js';
+import Cliente from '../models/cliente.js';
+import User from '../models/users.js';
+import { gerarNotaFiscal, gerarNumeroNota, getUrlNotaFiscal } from './notaFiscalService.js';
 
 // Configuração do Mercado Pago (você precisará configurar suas credenciais)
 // import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
@@ -176,6 +179,84 @@ _Obrigado pela preferência!_`;
     return true;
 };
 
+// Enviar nota fiscal via WhatsApp
+const enviarNotaFiscalWhatsApp = async (telefone, nomeCliente, numeroNota, urlNotaFiscal, cpfCliente) => {
+    const telefoneFormatado = telefone.replace(/\D/g, '');
+    const telefoneCompleto = telefoneFormatado.startsWith('55') 
+        ? telefoneFormatado 
+        : `55${telefoneFormatado}`;
+
+    const linkAcompanhamento = `${APP_URL}/acompanhar`;
+
+    const mensagem = `🦊 *Fox Uniformes*
+
+Olá ${nomeCliente}! 👋
+
+✅ *Pagamento Confirmado!*
+
+Seu pagamento foi processado com sucesso e seu pedido já está em produção! 🎉
+
+📄 *Nota Fiscal:* ${numeroNota}
+🔗 ${urlNotaFiscal}
+
+📦 *Acompanhe seu pedido:*
+${linkAcompanhamento}
+_(Use seu CPF: ${cpfCliente || 'cadastrado'} para consultar)_
+
+⏳ Em breve você receberá atualizações sobre a entrega.
+
+_Obrigado pela confiança!_ 🧡`;
+
+    if (WHATSAPP_API_URL && WHATSAPP_API_TOKEN) {
+        try {
+            // Enviar mensagem de texto
+            await fetch(`${WHATSAPP_API_URL}/message/sendText`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': WHATSAPP_API_TOKEN,
+                },
+                body: JSON.stringify({
+                    number: telefoneCompleto,
+                    text: mensagem,
+                }),
+            });
+
+            // Enviar o PDF como documento (se a API suportar)
+            try {
+                await fetch(`${WHATSAPP_API_URL}/message/sendMedia`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': WHATSAPP_API_TOKEN,
+                    },
+                    body: JSON.stringify({
+                        number: telefoneCompleto,
+                        mediatype: 'document',
+                        media: urlNotaFiscal,
+                        fileName: `nota_fiscal_${numeroNota}.pdf`,
+                        caption: `Nota Fiscal ${numeroNota} - Fox Uniformes`,
+                    }),
+                });
+            } catch (docError) {
+                console.log('Nota fiscal enviada apenas como link (API não suporta envio de documento)');
+            }
+
+            console.log(`✅ Nota fiscal enviada via WhatsApp para ${telefoneCompleto}`);
+        } catch (error) {
+            console.error('Erro ao enviar nota fiscal via WhatsApp:', error);
+        }
+    } else {
+        console.log('=== NOTA FISCAL WHATSAPP (DEBUG) ===');
+        console.log(`Para: ${telefoneCompleto}`);
+        console.log(mensagem);
+        console.log(`URL do PDF: ${urlNotaFiscal}`);
+        console.log('====================================');
+    }
+
+    return true;
+};
+
 // Processar webhook de pagamento (Mercado Pago)
 const processarWebhookPagamento = async (webhookData) => {
     const { type, data } = webhookData;
@@ -234,18 +315,107 @@ const atualizarStatusPedidos = async (pedidosIds, novoStatus) => {
 };
 
 // Confirmar pagamento manualmente (para admin)
-const confirmarPagamentoManual = async (pagamentoId, metodoPagamento = 'PIX') => {
-    const pagamento = await pagamentoRepository.updatePagamento(pagamentoId, {
+const confirmarPagamentoManual = async (pagamentoId, metodoPagamento = 'PIX', parcelas = 1) => {
+    // Buscar pagamento com dados populados
+    const pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
+    
+    if (!pagamento) {
+        throw new Error('Pagamento não encontrado');
+    }
+
+    // Buscar dados completos do cliente
+    const cliente = await Cliente.findById(pagamento.clienteId);
+    
+    // Buscar dados do vendedor (do primeiro pedido)
+    let vendedor = null;
+    if (pagamento.pedidos && pagamento.pedidos.length > 0) {
+        const primeiroPedido = await Pedido.findById(pagamento.pedidos[0]).populate('vendedorId');
+        vendedor = primeiroPedido?.vendedorId;
+    }
+
+    // Buscar itens dos pedidos
+    const pedidosCompletos = await Pedido.find({ 
+        _id: { $in: pagamento.pedidos } 
+    }).populate('produtoId');
+
+    // Gerar número da nota fiscal
+    const numeroNota = gerarNumeroNota();
+
+    // Preparar itens para a nota fiscal
+    const itensNota = pedidosCompletos.map(pedido => ({
+        produtoNome: pedido.produtoId?.name || 'Produto',
+        categoria: pedido.produtoId?.categoria || '',
+        tamanho: pedido.produtoId?.tamanho || '',
+        quantidade: pedido.quantidade,
+        precoUnitario: pedido.preco / pedido.quantidade,
+        precoTotal: pedido.preco,
+        observacoes: pedido.observacoes || '',
+    }));
+
+    // Gerar nota fiscal em PDF
+    let caminhoNotaFiscal = null;
+    let urlNotaFiscal = null;
+
+    try {
+        caminhoNotaFiscal = await gerarNotaFiscal({
+            numeroNota,
+            cliente: {
+                nome: cliente?.nome || 'Cliente',
+                cpf: cliente?.cpf || 'Não informado',
+                telefone: cliente?.telefone || '',
+                email: cliente?.email || '',
+                rua: cliente?.rua || '',
+                numero: cliente?.numero || '',
+                bairro: cliente?.bairro || '',
+                cidade: cliente?.cidade || '',
+                estado: cliente?.estado || '',
+                cep: cliente?.cep || '',
+            },
+            vendedor: vendedor ? { login: vendedor.login } : null,
+            itens: itensNota,
+            valorTotal: pagamento.valorTotal,
+            formaPagamento: metodoPagamento.toLowerCase(),
+            parcelas,
+            dataEmissao: new Date(),
+        });
+
+        urlNotaFiscal = `${APP_URL}${getUrlNotaFiscal(caminhoNotaFiscal)}`;
+        console.log(`✅ Nota fiscal gerada: ${numeroNota}`);
+    } catch (error) {
+        console.error('Erro ao gerar nota fiscal:', error);
+    }
+
+    // Atualizar pagamento com status aprovado e dados da nota fiscal
+    const pagamentoAtualizado = await pagamentoRepository.updatePagamento(pagamentoId, {
         status: 'Aprovado',
         metodoPagamento,
+        parcelas,
         pagamentoConfirmadoEm: new Date(),
+        notaFiscal: {
+            numero: numeroNota,
+            caminho: caminhoNotaFiscal,
+            url: urlNotaFiscal,
+            geradaEm: new Date(),
+        },
     });
 
-    if (pagamento) {
+    // Atualizar status dos pedidos para "Em Progresso"
+    if (pagamentoAtualizado) {
         await atualizarStatusPedidos(pagamento.pedidos, 'Em Progresso');
     }
 
-    return pagamento;
+    // Enviar nota fiscal via WhatsApp
+    if (cliente?.telefone && urlNotaFiscal) {
+        await enviarNotaFiscalWhatsApp(
+            cliente.telefone,
+            cliente.nome,
+            numeroNota,
+            urlNotaFiscal,
+            cliente.cpf
+        );
+    }
+
+    return { pagamento: pagamentoAtualizado, notaFiscal: { numero: numeroNota, url: urlNotaFiscal } };
 };
 
 // Cancelar pagamento

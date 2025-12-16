@@ -46,6 +46,24 @@ const pagamentoSchema = new mongoose.Schema({
     pagamentoConfirmadoEm: {
         type: Date,
     },
+    notaFiscal: {
+        numero: {
+            type: String,
+        },
+        caminho: {
+            type: String,
+        },
+        url: {
+            type: String,
+        },
+        geradaEm: {
+            type: Date,
+        },
+        enviadaWhatsApp: {
+            type: Boolean,
+            default: false,
+        },
+    },
 }, {
     timestamps: true,
 });

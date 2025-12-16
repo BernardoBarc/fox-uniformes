@@ -12,6 +12,10 @@ const getPedidosByVendedor = async (vendedorId) => {
     return await pedidoRepository.getPedidosByVendedor(vendedorId);
 };
 
+const getPedidosByCliente = async (clienteId) => {
+    return await pedidoRepository.getPedidosByCliente(clienteId);
+};
+
 const savePedido = async (pedidoData) => {
     return await pedidoRepository.savePedido(pedidoData);
 };
@@ -28,6 +32,7 @@ const pedidoService = {
     getPedido,
     getAllPedidos,
     getPedidosByVendedor,
+    getPedidosByCliente,
     savePedido,
     updatePedido,
     deletePedido
