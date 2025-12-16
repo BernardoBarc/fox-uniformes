@@ -75,13 +75,37 @@ export default function PagamentoPage() {
   const handlePagar = async () => {
     setProcessando(true);
     
-    // Aqui seria integrado com o gateway de pagamento real
-    // Por enquanto, apenas simula o processo
-    
-    setTimeout(() => {
-      alert("Redirecionando para o gateway de pagamento...\n\n(Esta é uma demonstração. Em produção, você seria redirecionado para o Mercado Pago ou outro gateway.)");
+    try {
+      // Confirmar pagamento (em produção, isso seria feito após o gateway confirmar)
+      const response = await fetch(`${API_URL}/pagamento/${pagamentoId}/confirmar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          metodoPagamento: metodoPagamento === 'pix' ? 'PIX' : 'Cartão de Crédito',
+          parcelas: metodoPagamento === 'cartao' ? parcelas : 1,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Atualizar estado local
+        setPagamento(prev => prev ? { ...prev, status: 'Aprovado' } : null);
+        
+        // Mostrar mensagem de sucesso
+        alert(`✅ Pagamento confirmado com sucesso!\n\n📄 Nota Fiscal: ${data.notaFiscal?.numero || 'Gerada'}\n\nVocê receberá a nota fiscal via WhatsApp em instantes.`);
+      } else {
+        const errorData = await response.json();
+        alert(`❌ Erro ao processar pagamento: ${errorData.error || 'Tente novamente'}`);
+      }
+    } catch (error) {
+      console.error('Erro ao processar pagamento:', error);
+      alert('❌ Erro ao conectar com o servidor. Tente novamente.');
+    } finally {
       setProcessando(false);
-    }, 2000);
+    }
   };
 
   if (loading) {

@@ -113,17 +113,20 @@ export default function loginPage() {
           </button>
           {error && <p className="text-red-500">{error}</p>}
         </form>
-        <p className="justify-center">
-          Não tem uma conta?{" "}
-          <a href="/register" className="text-blue-500 hover:underline">
-            Registre-se aqui
-          </a>
-        </p>
         <p className="mt-4 justify-center">
-          <a href="/Esqueci-minha-senha" className="text-blue-500 hover:underline">
+          <a href="/Esqueci-senha" className="text-blue-500 hover:underline">
             Esqueci minha senha
           </a>
         </p>
+        <div className="mt-8 p-4 bg-gray-100 rounded-lg text-center">
+          <p className="text-gray-600 mb-2">É cliente? Acompanhe seus pedidos:</p>
+          <a 
+            href="/acompanhar" 
+            className="inline-flex items-center gap-2 bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition"
+          >
+            📦 Acompanhar Pedidos
+          </a>
+        </div>
     </main>
   );
 }
