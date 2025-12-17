@@ -26,12 +26,25 @@ const pedidoSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pendente', 'Em Progresso', 'Concluído', 'Cancelado', 'Aguardando Pagamento'],
+        enum: ['Pendente', 'Em Progresso', 'Em Trânsito', 'Concluído', 'Cancelado', 'Aguardando Pagamento'],
         default: 'Pendente'
     },
     preco: {
         type: Number,
         required: true
+    },
+    precoOriginal: {
+        type: Number,
+        required: false // Preço antes do desconto
+    },
+    cupomAplicado: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Cupom',
+        required: false
+    },
+    descontoAplicado: {
+        type: Number,
+        default: 0 // Valor do desconto em reais
     },
     entrega: {
         type: String,

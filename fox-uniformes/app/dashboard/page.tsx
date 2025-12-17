@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_URL } from "../config/api";
 
 // Tipos
 interface UserData {
@@ -59,8 +60,6 @@ interface Trajeto {
 }
 
 type TabType = "dashboard" | "pedidos" | "trajetos" | "clientes" | "novoPedido" | "novoTrajeto" | "novoCliente";
-
-const API_URL = "http://localhost:5000";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -127,6 +126,21 @@ export default function DashboardPage() {
   // Total do carrinho
   const totalCarrinho = carrinho.reduce((acc, item) => acc + item.precoTotal, 0);
 
+  // Estados para cupom de desconto
+  const [codigoCupom, setCodigoCupom] = useState("");
+  const [cupomAplicado, setCupomAplicado] = useState<{
+    _id: string;
+    codigo: string;
+    desconto: number;
+    valorDesconto: number;
+    valorFinal: number;
+  } | null>(null);
+  const [validandoCupom, setValidandoCupom] = useState(false);
+  const [erroCupom, setErroCupom] = useState<string | null>(null);
+
+  // Total final (com desconto se houver)
+  const totalFinal = cupomAplicado ? cupomAplicado.valorFinal : totalCarrinho;
+
   // Pedidos ativos (excluindo cancelados)
   const pedidosAtivos = pedidos.filter(p => p.status !== "Cancelado");
 
@@ -180,7 +194,7 @@ export default function DashboardPage() {
       }
 
       try {
-        const response = await fetch("http://localhost:5000/auth/verify", {
+        const response = await fetch("${API_URL}/auth/verify", {
           method: "GET",
           headers: getAuthHeaders(),
         });
@@ -214,7 +228,7 @@ export default function DashboardPage() {
   // Funções para buscar dados
   const fetchPedidos = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/pedidos/vendedor/${userData?.id}`, {
+      const response = await fetch(`${API_URL}/pedidos/vendedor/${userData?.id}`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -228,7 +242,7 @@ export default function DashboardPage() {
 
   const fetchTrajetos = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/trajetos/vendedor/${userData?.id}`, {
+      const response = await fetch(`${API_URL}/trajetos/vendedor/${userData?.id}`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -242,7 +256,7 @@ export default function DashboardPage() {
 
   const fetchClientes = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/clientes/vendedor/${userData?.id}`, {
+      const response = await fetch(`${API_URL}/clientes/vendedor/${userData?.id}`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -256,7 +270,7 @@ export default function DashboardPage() {
 
   const fetchProdutos = async () => {
     try {
-      const response = await fetch("http://localhost:5000/produtos", {
+      const response = await fetch("${API_URL}/produtos", {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -267,6 +281,63 @@ export default function DashboardPage() {
       console.error("Erro ao buscar produtos:", error);
     }
   };
+
+  // Funções para validar e aplicar cupom
+  const handleValidarCupom = async () => {
+    if (!codigoCupom.trim()) {
+      setErroCupom("Digite um código de cupom");
+      return;
+    }
+
+    setValidandoCupom(true);
+    setErroCupom(null);
+
+    try {
+      const response = await fetch("${API_URL}/cupons/validar", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          codigo: codigoCupom,
+          valorPedido: totalCarrinho,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.valido) {
+        setCupomAplicado(data.cupom);
+        setMessage({ type: "success", text: data.mensagem });
+      } else {
+        setErroCupom(data.mensagem);
+        setCupomAplicado(null);
+      }
+    } catch (error) {
+      setErroCupom("Erro ao validar cupom");
+    } finally {
+      setValidandoCupom(false);
+    }
+  };
+
+  const handleRemoverCupom = () => {
+    setCupomAplicado(null);
+    setCodigoCupom("");
+    setErroCupom(null);
+    setMessage({ type: "success", text: "Cupom removido" });
+  };
+
+  // Revalidar cupom quando o carrinho mudar
+  useEffect(() => {
+    if (cupomAplicado && totalCarrinho > 0) {
+      // Recalcular desconto com novo valor do carrinho
+      const valorDesconto = (totalCarrinho * cupomAplicado.desconto) / 100;
+      const valorFinal = totalCarrinho - valorDesconto;
+      setCupomAplicado({
+        ...cupomAplicado,
+        valorDesconto,
+        valorFinal,
+      });
+    }
+  }, [totalCarrinho]);
 
   // Funções para criar novos registros
   const handleAdicionarAoCarrinho = () => {
@@ -440,9 +511,18 @@ export default function DashboardPage() {
     setMessage(null);
 
     try {
+      // Calcular desconto proporcional para cada item se houver cupom
+      const descontoProporcional = cupomAplicado 
+        ? (cupomAplicado.desconto / 100) 
+        : 0;
+
       // Criar um pedido para cada item do carrinho
       const pedidosCriados = [];
       for (const item of carrinho) {
+        const precoComDesconto = cupomAplicado 
+          ? item.precoTotal - (item.precoTotal * descontoProporcional)
+          : item.precoTotal;
+
         const formData = new FormData();
         formData.append("nomeCliente", novoPedido.nomeCliente);
         formData.append("cpfCliente", novoPedido.cpfCliente.replace(/\D/g, ""));
@@ -450,17 +530,23 @@ export default function DashboardPage() {
         formData.append("clienteId", clienteSelecionado._id);
         formData.append("produtoId", item.produtoId);
         formData.append("quantidade", item.quantidade.toString());
-        formData.append("preco", item.precoTotal.toString());
+        formData.append("preco", precoComDesconto.toString());
+        formData.append("precoOriginal", item.precoTotal.toString());
         formData.append("entrega", novoPedido.entrega);
         formData.append("observacoes", item.observacoes);
         formData.append("vendedorId", userData?.id || "");
         formData.append("status", "Aguardando Pagamento");
         
+        if (cupomAplicado) {
+          formData.append("cupomAplicado", cupomAplicado._id);
+          formData.append("descontoAplicado", (item.precoTotal * descontoProporcional).toString());
+        }
+        
         if (item.foto) {
           formData.append("photo", item.foto);
         }
 
-        const response = await fetch("http://localhost:5000/pedidos", {
+        const response = await fetch("${API_URL}/pedidos", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${getToken()}`,
@@ -477,6 +563,18 @@ export default function DashboardPage() {
         pedidosCriados.push(pedidoCriado);
       }
 
+      // Se cupom foi aplicado, incrementar uso
+      if (cupomAplicado) {
+        try {
+          await fetch(`${API_URL}/cupons/${cupomAplicado._id}/aplicar`, {
+            method: "POST",
+            headers: getAuthHeaders(),
+          });
+        } catch (error) {
+          console.warn("Aviso: Erro ao registrar uso do cupom");
+        }
+      }
+
       // Gerar link de pagamento e enviar via WhatsApp
       try {
         const pagamentoResponse = await fetch(`${API_URL}/pagamento/criar`, {
@@ -485,7 +583,7 @@ export default function DashboardPage() {
           body: JSON.stringify({
             clienteId: clienteSelecionado._id,
             pedidos: pedidosCriados.map(p => p._id || p.pedido?._id),
-            valorTotal: totalCarrinho,
+            valorTotal: totalFinal,
             telefone: novoPedido.telefoneCliente,
             nomeCliente: novoPedido.nomeCliente,
           }),
@@ -498,10 +596,16 @@ export default function DashboardPage() {
         console.warn("Aviso: Erro ao gerar link de pagamento:", pagamentoError);
       }
 
-      setMessage({ type: "success", text: `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso! Link de pagamento enviado via WhatsApp.` });
+      const mensagemSucesso = cupomAplicado 
+        ? `Venda finalizada com desconto de ${cupomAplicado.desconto}%! ${carrinho.length} pedido(s) criado(s). Link de pagamento enviado via WhatsApp.`
+        : `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso! Link de pagamento enviado via WhatsApp.`;
+      
+      setMessage({ type: "success", text: mensagemSucesso });
       setNovoPedido({ nomeCliente: "", cpfCliente: "", telefoneCliente: "", entrega: "" });
       setClienteSelecionado(null);
       setCarrinho([]);
+      setCupomAplicado(null);
+      setCodigoCupom("");
       fetchPedidos();
       setActiveTab("pedidos");
     } catch (error) {
@@ -517,7 +621,7 @@ export default function DashboardPage() {
     setMessage(null);
 
     try {
-      const response = await fetch("http://localhost:5000/trajeto", {
+      const response = await fetch("${API_URL}/trajeto", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -557,7 +661,7 @@ export default function DashboardPage() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/clientes", {
+      const response = await fetch("${API_URL}/clientes", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -612,6 +716,7 @@ export default function DashboardPage() {
       case "Aguardando Pagamento": return "bg-purple-500";
       case "Em Progresso":
       case "Em Andamento": return "bg-blue-500";
+      case "Em Trânsito": return "bg-indigo-500";
       case "Concluído": return "bg-green-500";
       case "Cancelado": return "bg-red-500";
       default: return "bg-gray-500";
@@ -1126,11 +1231,67 @@ export default function DashboardPage() {
                         {/* Total */}
                         <div className="border-t border-gray-600 pt-4 mb-4">
                           <div className="flex justify-between items-center text-lg">
-                            <span className="font-semibold">Total:</span>
-                            <span className="font-bold text-2xl text-green-400">
+                            <span className="font-semibold">Subtotal:</span>
+                            <span className={`font-bold ${cupomAplicado ? 'line-through text-gray-500' : 'text-2xl text-green-400'}`}>
                               R$ {totalCarrinho.toFixed(2)}
                             </span>
                           </div>
+                          
+                          {cupomAplicado && (
+                            <>
+                              <div className="flex justify-between items-center text-sm text-green-400 mt-1">
+                                <span>Desconto ({cupomAplicado.desconto}%):</span>
+                                <span>- R$ {cupomAplicado.valorDesconto.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-lg mt-2">
+                                <span className="font-semibold">Total com desconto:</span>
+                                <span className="font-bold text-2xl text-green-400">
+                                  R$ {totalFinal.toFixed(2)}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Cupom de Desconto */}
+                        <div className="border-t border-gray-600 pt-4 mb-4">
+                          <p className="text-sm text-gray-400 mb-2">🏷️ Cupom de Desconto</p>
+                          
+                          {cupomAplicado ? (
+                            <div className="flex items-center justify-between bg-green-900/30 p-3 rounded-lg border border-green-500/30">
+                              <div>
+                                <span className="font-mono font-bold text-green-400">{cupomAplicado.codigo}</span>
+                                <span className="ml-2 text-sm text-green-300">({cupomAplicado.desconto}% OFF)</span>
+                              </div>
+                              <button
+                                onClick={handleRemoverCupom}
+                                className="text-red-400 hover:text-red-300 text-sm"
+                              >
+                                ✕ Remover
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={codigoCupom}
+                                onChange={(e) => setCodigoCupom(e.target.value.toUpperCase())}
+                                placeholder="Digite o código"
+                                className="flex-1 bg-gray-700 rounded-lg px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              />
+                              <button
+                                onClick={handleValidarCupom}
+                                disabled={validandoCupom || !codigoCupom}
+                                className="bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50"
+                              >
+                                {validandoCupom ? "..." : "Aplicar"}
+                              </button>
+                            </div>
+                          )}
+                          
+                          {erroCupom && (
+                            <p className="text-xs text-red-400 mt-2">{erroCupom}</p>
+                          )}
                         </div>
 
                         {/* Botão Finalizar */}

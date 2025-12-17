@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_URL } from "../config/api";
 
 // Tipos
 interface UserData {
@@ -73,9 +74,20 @@ interface Vendedor {
   createdAt: string;
 }
 
-type TabType = "dashboard" | "pedidos" | "vendedores" | "produtos" | "clientes" | "trajetos" | "novoVendedor" | "novoProduto";
+interface Cupom {
+  _id: string;
+  codigo: string;
+  desconto: number;
+  valorMinimo: number;
+  ativo: boolean;
+  dataValidade: string | null;
+  usoMaximo: number | null;
+  vezesUsado: number;
+  criadoPor: { _id: string; name: string; login: string };
+  createdAt: string;
+}
 
-const API_URL = "http://localhost:5000";
+type TabType = "dashboard" | "pedidos" | "vendedores" | "produtos" | "clientes" | "trajetos" | "novoVendedor" | "novoProduto" | "cupons" | "novoCupom" | "novoCliente";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -90,6 +102,7 @@ export default function AdminDashboardPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+  const [cupons, setCupons] = useState<Cupom[]>([]);
 
   // Estados para formulários
   const [novoVendedor, setNovoVendedor] = useState({
@@ -110,6 +123,31 @@ export default function AdminDashboardPage() {
     categoria: "",
     tamanho: "",
   });
+
+  const [novoCupom, setNovoCupom] = useState({
+    codigo: "",
+    desconto: 10,
+    valorMinimo: 0,
+    dataValidade: "",
+    usoMaximo: "",
+    notificarClientes: true,
+  });
+
+  const [novoCliente, setNovoCliente] = useState({
+    nome: "",
+    cpf: "",
+    email: "",
+    telefone: "",
+    cidade: "",
+    estado: "",
+    rua: "",
+    numero: "",
+    bairro: "",
+    cep: "",
+    complemento: "",
+  });
+
+  const [erroValidacaoCPF, setErroValidacaoCPF] = useState<string | null>(null);
 
   const getToken = () => localStorage.getItem("token");
 
@@ -135,7 +173,7 @@ export default function AdminDashboardPage() {
       }
 
       try {
-        const response = await fetch("http://localhost:5000/auth/verify", {
+        const response = await fetch("${API_URL}/auth/verify", {
           method: "GET",
           headers: getAuthHeaders(),
         });
@@ -174,12 +212,13 @@ export default function AdminDashboardPage() {
     fetchClientes();
     fetchProdutos();
     fetchVendedores();
+    fetchCupons();
   };
 
   // Funções para buscar dados (TODOS, não apenas do vendedor)
   const fetchPedidos = async () => {
     try {
-      const response = await fetch("http://localhost:5000/pedidos", {
+      const response = await fetch("${API_URL}/pedidos", {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -193,7 +232,7 @@ export default function AdminDashboardPage() {
 
   const fetchTrajetos = async () => {
     try {
-      const response = await fetch("http://localhost:5000/trajetos", {
+      const response = await fetch("${API_URL}/trajetos", {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -207,7 +246,7 @@ export default function AdminDashboardPage() {
 
   const fetchClientes = async () => {
     try {
-      const response = await fetch("http://localhost:5000/clientes", {
+      const response = await fetch("${API_URL}/clientes", {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -221,7 +260,7 @@ export default function AdminDashboardPage() {
 
   const fetchProdutos = async () => {
     try {
-      const response = await fetch("http://localhost:5000/produtos", {
+      const response = await fetch("${API_URL}/produtos", {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -235,7 +274,7 @@ export default function AdminDashboardPage() {
 
   const fetchVendedores = async () => {
     try {
-      const response = await fetch("http://localhost:5000/users", {
+      const response = await fetch("${API_URL}/users", {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -247,10 +286,24 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const fetchCupons = async () => {
+    try {
+      const response = await fetch("${API_URL}/cupons", {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCupons(data);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar cupons:", error);
+    }
+  };
+
   // Função para atualizar status do pedido
   const handleUpdatePedidoStatus = async (pedidoId: string, novoStatus: string) => {
     try {
-      const response = await fetch(`http://localhost:5000/pedidos/${pedidoId}`, {
+      const response = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
         method: "PUT",
         headers: getAuthHeaders(),
         body: JSON.stringify({ status: novoStatus }),
@@ -280,7 +333,7 @@ export default function AdminDashboardPage() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/users", {
+      const response = await fetch("${API_URL}/users", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -327,7 +380,7 @@ export default function AdminDashboardPage() {
     setMessage(null);
 
     try {
-      const response = await fetch("http://localhost:5000/produtos", {
+      const response = await fetch("${API_URL}/produtos", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify(novoProduto),
@@ -354,7 +407,7 @@ export default function AdminDashboardPage() {
     if (!confirm("Tem certeza que deseja excluir este vendedor?")) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/users/${vendedorId}`, {
+      const response = await fetch(`${API_URL}/users/${vendedorId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
@@ -375,7 +428,7 @@ export default function AdminDashboardPage() {
     if (!confirm("Tem certeza que deseja excluir este produto?")) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/produtos/${produtoId}`, {
+      const response = await fetch(`${API_URL}/produtos/${produtoId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
@@ -385,6 +438,188 @@ export default function AdminDashboardPage() {
         fetchProdutos();
       } else {
         setMessage({ type: "error", text: "Erro ao excluir produto" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    }
+  };
+
+  // Função para formatar CPF
+  const formatarCPF = (valor: string) => {
+    const numeros = valor.replace(/\D/g, "");
+    return numeros
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
+      .substring(0, 14);
+  };
+
+  // Função para validar CPF (algoritmo oficial)
+  const validarCPF = (cpf: string): boolean => {
+    const cpfLimpo = cpf.replace(/\D/g, "");
+    
+    if (cpfLimpo.length !== 11) return false;
+    if (/^(\d)\1+$/.test(cpfLimpo)) return false;
+    
+    let soma = 0;
+    for (let i = 0; i < 9; i++) {
+      soma += parseInt(cpfLimpo.charAt(i)) * (10 - i);
+    }
+    let resto = (soma * 10) % 11;
+    if (resto === 10 || resto === 11) resto = 0;
+    if (resto !== parseInt(cpfLimpo.charAt(9))) return false;
+    
+    soma = 0;
+    for (let i = 0; i < 10; i++) {
+      soma += parseInt(cpfLimpo.charAt(i)) * (11 - i);
+    }
+    resto = (soma * 10) % 11;
+    if (resto === 10 || resto === 11) resto = 0;
+    if (resto !== parseInt(cpfLimpo.charAt(10))) return false;
+    
+    return true;
+  };
+
+  // Função para criar cliente
+  const handleCriarCliente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+
+    if (!validarCPF(novoCliente.cpf)) {
+      setMessage({ type: "error", text: "CPF inválido! Por favor, verifique o número." });
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("${API_URL}/clientes", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          ...novoCliente,
+          cpf: novoCliente.cpf.replace(/\D/g, ""),
+          vendedorId: userData?.id,
+        }),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: "Cliente cadastrado com sucesso!" });
+        setNovoCliente({ nome: "", cpf: "", email: "", telefone: "", cidade: "", estado: "", rua: "", numero: "", bairro: "", cep: "", complemento: "" });
+        setErroValidacaoCPF(null);
+        fetchClientes();
+        setActiveTab("clientes");
+      } else {
+        const error = await response.json();
+        setMessage({ type: "error", text: error.error || "Erro ao cadastrar cliente" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para criar cupom
+  const handleCriarCupom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch("${API_URL}/cupons", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          codigo: novoCupom.codigo,
+          desconto: novoCupom.desconto,
+          valorMinimo: novoCupom.valorMinimo || 0,
+          dataValidade: novoCupom.dataValidade || null,
+          usoMaximo: novoCupom.usoMaximo ? parseInt(novoCupom.usoMaximo) : null,
+          criadoPor: userData?.id,
+          notificarClientes: novoCupom.notificarClientes,
+        }),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: "Cupom criado com sucesso! Clientes serão notificados via WhatsApp." });
+        setNovoCupom({
+          codigo: "",
+          desconto: 10,
+          valorMinimo: 0,
+          dataValidade: "",
+          usoMaximo: "",
+          notificarClientes: true,
+        });
+        fetchCupons();
+        setActiveTab("cupons");
+      } else {
+        const error = await response.json();
+        setMessage({ type: "error", text: error.error || "Erro ao criar cupom" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para ativar/desativar cupom
+  const handleToggleCupom = async (cupomId: string, ativo: boolean) => {
+    try {
+      const endpoint = ativo ? "desativar" : "ativar";
+      const response = await fetch(`${API_URL}/cupons/${cupomId}/${endpoint}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: `Cupom ${ativo ? "desativado" : "ativado"} com sucesso!` });
+        fetchCupons();
+      } else {
+        setMessage({ type: "error", text: "Erro ao atualizar cupom" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    }
+  };
+
+  // Função para deletar cupom
+  const handleDeletarCupom = async (cupomId: string) => {
+    if (!confirm("Tem certeza que deseja excluir este cupom?")) return;
+
+    try {
+      const response = await fetch(`${API_URL}/cupons/${cupomId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: "Cupom excluído com sucesso!" });
+        fetchCupons();
+      } else {
+        setMessage({ type: "error", text: "Erro ao excluir cupom" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    }
+  };
+
+  // Função para reenviar notificação do cupom
+  const handleReenviarNotificacao = async (cupomId: string) => {
+    if (!confirm("Enviar notificação deste cupom para todos os clientes?")) return;
+
+    try {
+      const response = await fetch(`${API_URL}/cupons/${cupomId}/reenviar`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMessage({ type: "success", text: `Notificações enviadas: ${data.enviados} sucesso, ${data.erros} erros` });
+      } else {
+        setMessage({ type: "error", text: "Erro ao enviar notificações" });
       }
     } catch (error) {
       setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
@@ -402,15 +637,20 @@ export default function AdminDashboardPage() {
       case "Pendente": return "bg-yellow-500";
       case "Em Progresso":
       case "Em Andamento": return "bg-blue-500";
+      case "Em Trânsito": return "bg-indigo-500";
       case "Concluído": return "bg-green-500";
       case "Cancelado": return "bg-red-500";
+      case "Aguardando Pagamento": return "bg-purple-500";
       default: return "bg-gray-500";
     }
   };
 
-  // Estatísticas
-  const pedidosPendentes = pedidos.filter(p => p.status === "Pendente").length;
-  const pedidosEmProgresso = pedidos.filter(p => p.status === "Em Progresso").length;
+  // Pedidos ativos (excluindo cancelados)
+  const pedidosAtivos = pedidos.filter(p => p.status !== "Cancelado");
+
+  // Estatísticas (usando pedidos ativos)
+  const pedidosPendentes = pedidosAtivos.filter(p => p.status === "Pendente").length;
+  const pedidosEmProgresso = pedidosAtivos.filter(p => p.status === "Em Progresso").length;
   const pedidosConcluidos = pedidos.filter(p => p.status === "Concluído").length;
   const faturamentoTotal = pedidos.filter(p => p.status === "Concluído").reduce((acc, p) => acc + (p.preco || 0), 0);
 
@@ -493,11 +733,37 @@ export default function AdminDashboardPage() {
               👥 Todos Clientes
             </button>
             <button
+              onClick={() => setActiveTab("novoCliente")}
+              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoCliente" ? "bg-orange-600" : "hover:bg-gray-700"}`}
+            >
+              ➕ Novo Cliente
+            </button>
+            <button
               onClick={() => setActiveTab("trajetos")}
               className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "trajetos" ? "bg-orange-600" : "hover:bg-gray-700"}`}
             >
               🗺️ Todas Rotas
             </button>
+            
+            {/* Seção de Cupons */}
+            <div className="border-t border-gray-700 mt-4 pt-4">
+              <p className="text-xs text-gray-500 uppercase mb-2 px-4">Marketing</p>
+              <button
+                onClick={() => setActiveTab("cupons")}
+                className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "cupons" ? "bg-orange-600" : "hover:bg-gray-700"}`}
+              >
+                🏷️ Cupons de Desconto
+                {cupons.filter(c => c.ativo).length > 0 && (
+                  <span className="ml-2 bg-green-500 text-xs px-2 py-1 rounded-full">{cupons.filter(c => c.ativo).length}</span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("novoCupom")}
+                className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoCupom" ? "bg-orange-600" : "hover:bg-gray-700"}`}
+              >
+                ➕ Novo Cupom
+              </button>
+            </div>
           </nav>
         </aside>
 
@@ -621,7 +887,7 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pedidos.map((pedido) => (
+                    {pedidosAtivos.map((pedido) => (
                       <tr key={pedido._id} className="border-b border-gray-700 hover:bg-gray-750">
                         <td className="px-4 py-3">
                           <div>
@@ -663,7 +929,9 @@ export default function AdminDashboardPage() {
                             className="bg-gray-700 rounded px-2 py-1 text-sm"
                           >
                             <option value="Pendente">Pendente</option>
+                            <option value="Aguardando Pagamento">Aguardando Pagamento</option>
                             <option value="Em Progresso">Em Progresso</option>
+                            <option value="Em Trânsito">Em Trânsito</option>
                             <option value="Concluído">Concluído</option>
                             <option value="Cancelado">Cancelado</option>
                           </select>
@@ -672,7 +940,7 @@ export default function AdminDashboardPage() {
                     ))}
                   </tbody>
                 </table>
-                {pedidos.length === 0 && (
+                {pedidosAtivos.length === 0 && (
                   <p className="p-4 text-gray-400 text-center">Nenhum pedido encontrado</p>
                 )}
               </div>
@@ -995,6 +1263,333 @@ export default function AdminDashboardPage() {
                   <p className="text-gray-400 col-span-3 text-center py-8">Nenhuma rota cadastrada</p>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Lista de Cupons */}
+          {activeTab === "cupons" && (
+            <div>
+              <h2 className="text-3xl font-bold mb-6">Cupons de Desconto</h2>
+              <div className="bg-gray-800 rounded-xl overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Código</th>
+                      <th className="px-4 py-3 text-left">Desconto</th>
+                      <th className="px-4 py-3 text-left">Valor Mínimo</th>
+                      <th className="px-4 py-3 text-left">Validade</th>
+                      <th className="px-4 py-3 text-left">Usos</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cupons.map((cupom) => (
+                      <tr key={cupom._id} className="border-b border-gray-700 hover:bg-gray-750">
+                        <td className="px-4 py-3">
+                          <span className="font-mono font-bold text-orange-400">{cupom.codigo}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="bg-green-600 px-2 py-1 rounded text-sm font-bold">{cupom.desconto}%</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {cupom.valorMinimo > 0 ? `R$ ${cupom.valorMinimo.toFixed(2)}` : "Sem mínimo"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {cupom.dataValidade 
+                            ? new Date(cupom.dataValidade).toLocaleDateString() 
+                            : "Sem validade"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {cupom.vezesUsado}{cupom.usoMaximo ? `/${cupom.usoMaximo}` : ""}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-3 py-1 rounded-full text-xs ${cupom.ativo ? "bg-green-600" : "bg-red-600"}`}>
+                            {cupom.ativo ? "Ativo" : "Inativo"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleToggleCupom(cupom._id, cupom.ativo)}
+                              className={`px-3 py-1 rounded text-xs ${cupom.ativo ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"}`}
+                            >
+                              {cupom.ativo ? "Desativar" : "Ativar"}
+                            </button>
+                            <button
+                              onClick={() => handleReenviarNotificacao(cupom._id)}
+                              className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs"
+                              title="Reenviar notificação"
+                            >
+                              📱
+                            </button>
+                            <button
+                              onClick={() => handleDeletarCupom(cupom._id)}
+                              className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {cupons.length === 0 && (
+                  <p className="p-4 text-gray-400 text-center">Nenhum cupom cadastrado</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Criar Novo Cupom */}
+          {activeTab === "novoCupom" && (
+            <div>
+              <h2 className="text-3xl font-bold mb-6">Criar Novo Cupom</h2>
+              <form onSubmit={handleCriarCupom} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm text-gray-400 mb-1">Código do Cupom</label>
+                    <input
+                      type="text"
+                      value={novoCupom.codigo}
+                      onChange={(e) => setNovoCupom({ ...novoCupom, codigo: e.target.value.toUpperCase() })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono uppercase"
+                      placeholder="Ex: DESCONTO20, PRIMEIRACOMPRA"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Desconto (%)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={novoCupom.desconto}
+                      onChange={(e) => setNovoCupom({ ...novoCupom, desconto: parseInt(e.target.value) })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Valor Mínimo do Pedido (R$)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={novoCupom.valorMinimo}
+                      onChange={(e) => setNovoCupom({ ...novoCupom, valorMinimo: parseFloat(e.target.value) })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="0 = sem mínimo"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Data de Validade (opcional)</label>
+                    <input
+                      type="date"
+                      value={novoCupom.dataValidade}
+                      onChange={(e) => setNovoCupom({ ...novoCupom, dataValidade: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Limite de Uso (opcional)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={novoCupom.usoMaximo}
+                      onChange={(e) => setNovoCupom({ ...novoCupom, usoMaximo: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Vazio = uso ilimitado"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={novoCupom.notificarClientes}
+                        onChange={(e) => setNovoCupom({ ...novoCupom, notificarClientes: e.target.checked })}
+                        className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-orange-500 focus:ring-orange-500"
+                      />
+                      <span className="text-gray-300">📱 Notificar todos os clientes via WhatsApp</span>
+                    </label>
+                    <p className="text-xs text-gray-500 mt-1 ml-7">
+                      Uma mensagem será enviada automaticamente para todos os clientes cadastrados
+                    </p>
+                  </div>
+                </div>
+
+                {/* Preview do Cupom */}
+                <div className="mt-6 p-4 bg-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-400 mb-2">Preview:</p>
+                  <div className="flex items-center gap-4">
+                    <span className="font-mono text-xl font-bold text-orange-400">{novoCupom.codigo || "CODIGO"}</span>
+                    <span className="bg-green-600 px-3 py-1 rounded-lg font-bold">{novoCupom.desconto}% OFF</span>
+                    {novoCupom.valorMinimo > 0 && (
+                      <span className="text-sm text-gray-400">Pedido mínimo: R$ {novoCupom.valorMinimo.toFixed(2)}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
+                  >
+                    {loading ? "Criando..." : "🎉 Criar Cupom"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Cadastrar Novo Cliente */}
+          {activeTab === "novoCliente" && (
+            <div>
+              <h2 className="text-3xl font-bold mb-6">Cadastrar Novo Cliente</h2>
+              <form onSubmit={handleCriarCliente} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm text-gray-400 mb-1">Nome Completo *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.nome}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, nome: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">CPF *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.cpf}
+                      onChange={(e) => {
+                        const cpfFormatado = formatarCPF(e.target.value);
+                        setNovoCliente({ ...novoCliente, cpf: cpfFormatado });
+                        if (cpfFormatado.length === 14) {
+                          if (!validarCPF(cpfFormatado)) {
+                            setErroValidacaoCPF("CPF inválido!");
+                          } else {
+                            setErroValidacaoCPF(null);
+                          }
+                        } else {
+                          setErroValidacaoCPF(null);
+                        }
+                      }}
+                      className={`w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 ${
+                        erroValidacaoCPF ? "ring-2 ring-red-500 focus:ring-red-500" : "focus:ring-orange-500"
+                      }`}
+                      placeholder="000.000.000-00"
+                      maxLength={14}
+                      required
+                    />
+                    {erroValidacaoCPF && (
+                      <p className="text-xs text-red-500 mt-1">❌ {erroValidacaoCPF}</p>
+                    )}
+                    {novoCliente.cpf.length === 14 && !erroValidacaoCPF && (
+                      <p className="text-xs text-green-500 mt-1">✅ CPF válido</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp) *</label>
+                    <input
+                      type="tel"
+                      value={novoCliente.telefone}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, telefone: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="(00) 00000-0000"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Links de pagamento serão enviados para este número</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={novoCliente.email}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, email: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Cidade *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.cidade}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, cidade: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Estado *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.estado}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, estado: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Rua *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.rua}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, rua: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Número *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.numero}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, numero: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Bairro *</label>
+                    <input
+                      type="text"
+                      value={novoCliente.bairro}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, bairro: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">CEP</label>
+                    <input
+                      type="text"
+                      value={novoCliente.cep}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, cep: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Complemento</label>
+                    <input
+                      type="text"
+                      value={novoCliente.complemento}
+                      onChange={(e) => setNovoCliente({ ...novoCliente, complemento: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
+                >
+                  {loading ? "Cadastrando..." : "👤 Cadastrar Cliente"}
+                </button>
+              </form>
             </div>
           )}
         </main>

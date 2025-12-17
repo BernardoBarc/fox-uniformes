@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { API_URL } from "../../config/api";
 
 interface Pedido {
   _id: string;
@@ -29,8 +30,6 @@ interface Pagamento {
   linkPagamento?: string;
   createdAt: string;
 }
-
-const API_URL = "http://localhost:5000";
 
 export default function PagamentoPage() {
   const params = useParams();

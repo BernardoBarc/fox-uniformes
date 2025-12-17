@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Link from "next/link";
+import { API_URL } from "../config/api";
 
 interface Produto {
   _id: string;
@@ -31,8 +32,6 @@ interface Cliente {
   cidade: string;
   estado: string;
 }
-
-const API_URL = "http://localhost:5000";
 
 export default function AcompanharPedidosPage() {
   const [cpf, setCpf] = useState("");
@@ -111,6 +110,8 @@ export default function AcompanharPedidosPage() {
         return "bg-purple-500/20 text-purple-400 border-purple-500/30";
       case "Em Progresso":
         return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+      case "Em Trânsito":
+        return "bg-indigo-500/20 text-indigo-400 border-indigo-500/30";
       case "Concluído":
         return "bg-green-500/20 text-green-400 border-green-500/30";
       case "Cancelado":
@@ -129,6 +130,8 @@ export default function AcompanharPedidosPage() {
         return "💳";
       case "Em Progresso":
         return "🔨";
+      case "Em Trânsito":
+        return "🚚";
       case "Concluído":
         return "✅";
       case "Cancelado":
@@ -147,8 +150,10 @@ export default function AcompanharPedidosPage() {
         return "Aguardando confirmação do pagamento";
       case "Em Progresso":
         return "Seu pedido está sendo produzido";
+      case "Em Trânsito":
+        return "Seu pedido está a caminho! 🚚";
       case "Concluído":
-        return "Pedido finalizado e pronto para entrega";
+        return "Pedido entregue com sucesso!";
       case "Cancelado":
         return "Este pedido foi cancelado";
       default:
@@ -161,6 +166,7 @@ export default function AcompanharPedidosPage() {
     const etapas = [
       { nome: "Aguardando Pagamento", icon: "💳" },
       { nome: "Em Progresso", icon: "🔨" },
+      { nome: "Em Trânsito", icon: "🚚" },
       { nome: "Concluído", icon: "✅" },
     ];
 

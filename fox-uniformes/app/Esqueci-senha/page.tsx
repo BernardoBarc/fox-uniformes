@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_URL } from "../config/api";
 
 const EsqueciSenha: React.FC = () => {
   const router = useRouter();
@@ -13,7 +14,7 @@ const EsqueciSenha: React.FC = () => {
       setError(null);
 
       try {
-        const response = await fetch("http://localhost:5000/auth/esqueci-senha", {
+        const response = await fetch(`${API_URL}/auth/esqueci-senha`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_URL } from "./config/api";
 
 export default function loginPage() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export default function loginPage() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/auth/verify", {
+      const response = await fetch(`${API_URL}/auth/verify`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -57,7 +58,7 @@ export default function loginPage() {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:5000/users/login", {
+      const response = await fetch(`${API_URL}/users/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -86,12 +87,11 @@ export default function loginPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <header className="mb-8">
-        <img src="/next.svg" alt="Logo" className="h-12" />
+      <header className="w-full h-auto justify-center flex">
+        <img src="/logoPreto.png" alt="Logo" className="h-12" />
       </header>
-      <h1 className="text-4xl font-bold">Login Page</h1>
-        <form onSubmit={handleLogin} className="flex flex-col gap-4 w-1/3">
-          <input
+      <form onSubmit={handleLogin} className="flex flex-col gap-4 w-1/3">
+        <input
             type="text"
             placeholder="Login"
             value={login}
@@ -118,15 +118,6 @@ export default function loginPage() {
             Esqueci minha senha
           </a>
         </p>
-        <div className="mt-8 p-4 bg-gray-100 rounded-lg text-center">
-          <p className="text-gray-600 mb-2">É cliente? Acompanhe seus pedidos:</p>
-          <a 
-            href="/acompanhar" 
-            className="inline-flex items-center gap-2 bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition"
-          >
-            📦 Acompanhar Pedidos
-          </a>
-        </div>
     </main>
   );
 }
