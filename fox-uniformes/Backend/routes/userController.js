@@ -53,12 +53,13 @@ router.get('/users/:id', async (req, res) => {
 
 router.post('/users', async (req, res) => {
     try {
+        console.log('Criando usuário com dados:', req.body);
         const hashedPassword = await bcrypt.hash(req.body.password, 10);
         const newUser = await userService.saveUser({ ...req.body, password: hashedPassword });
         res.status(201).json(newUser);
     } catch (error) {
         console.error('Erro ao criar usuário:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
     }
 });
 
