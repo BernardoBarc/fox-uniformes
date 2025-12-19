@@ -194,7 +194,7 @@ export default function DashboardPage() {
       }
 
       try {
-        const response = await fetch("${API_URL}/auth/verify", {
+        const response = await fetch(`${API_URL}/auth/verify`, {
           method: "GET",
           headers: getAuthHeaders(),
         });
@@ -270,7 +270,7 @@ export default function DashboardPage() {
 
   const fetchProdutos = async () => {
     try {
-      const response = await fetch("${API_URL}/produtos", {
+      const response = await fetch(`${API_URL}/produtos`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -293,7 +293,7 @@ export default function DashboardPage() {
     setErroCupom(null);
 
     try {
-      const response = await fetch("${API_URL}/cupons/validar", {
+      const response = await fetch(`${API_URL}/cupons/validar`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -546,7 +546,7 @@ export default function DashboardPage() {
           formData.append("photo", item.foto);
         }
 
-        const response = await fetch("${API_URL}/pedidos", {
+        const response = await fetch(`${API_URL}/pedidos`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${getToken()}`,
@@ -621,7 +621,7 @@ export default function DashboardPage() {
     setMessage(null);
 
     try {
-      const response = await fetch("${API_URL}/trajeto", {
+      const response = await fetch(`${API_URL}/trajeto`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -661,7 +661,7 @@ export default function DashboardPage() {
     }
 
     try {
-      const response = await fetch("${API_URL}/clientes", {
+      const response = await fetch(`${API_URL}/clientes`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({

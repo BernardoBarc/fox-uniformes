@@ -173,7 +173,7 @@ export default function AdminDashboardPage() {
       }
 
       try {
-        const response = await fetch("${API_URL}/auth/verify", {
+        const response = await fetch(`${API_URL}/auth/verify`, {
           method: "GET",
           headers: getAuthHeaders(),
         });
@@ -218,7 +218,7 @@ export default function AdminDashboardPage() {
   // Funções para buscar dados (TODOS, não apenas do vendedor)
   const fetchPedidos = async () => {
     try {
-      const response = await fetch("${API_URL}/pedidos", {
+      const response = await fetch(`${API_URL}/pedidos`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -232,7 +232,7 @@ export default function AdminDashboardPage() {
 
   const fetchTrajetos = async () => {
     try {
-      const response = await fetch("${API_URL}/trajetos", {
+      const response = await fetch(`${API_URL}/trajetos`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -246,7 +246,7 @@ export default function AdminDashboardPage() {
 
   const fetchClientes = async () => {
     try {
-      const response = await fetch("${API_URL}/clientes", {
+      const response = await fetch(`${API_URL}/clientes`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -260,7 +260,7 @@ export default function AdminDashboardPage() {
 
   const fetchProdutos = async () => {
     try {
-      const response = await fetch("${API_URL}/produtos", {
+      const response = await fetch(`${API_URL}/produtos`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -274,7 +274,7 @@ export default function AdminDashboardPage() {
 
   const fetchVendedores = async () => {
     try {
-      const response = await fetch("${API_URL}/users", {
+      const response = await fetch(`${API_URL}/users`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -288,7 +288,7 @@ export default function AdminDashboardPage() {
 
   const fetchCupons = async () => {
     try {
-      const response = await fetch("${API_URL}/cupons", {
+      const response = await fetch(`${API_URL}/cupons`, {
         headers: getAuthHeaders(),
       });
       if (response.ok) {
@@ -333,7 +333,7 @@ export default function AdminDashboardPage() {
     }
 
     try {
-      const response = await fetch("${API_URL}/users", {
+      const response = await fetch(`${API_URL}/users`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -380,7 +380,7 @@ export default function AdminDashboardPage() {
     setMessage(null);
 
     try {
-      const response = await fetch("${API_URL}/produtos", {
+      const response = await fetch(`${API_URL}/produtos`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify(novoProduto),
@@ -493,7 +493,7 @@ export default function AdminDashboardPage() {
     }
 
     try {
-      const response = await fetch("${API_URL}/clientes", {
+      const response = await fetch(`${API_URL}/clientes`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -527,7 +527,7 @@ export default function AdminDashboardPage() {
     setMessage(null);
 
     try {
-      const response = await fetch("${API_URL}/cupons", {
+      const response = await fetch(`${API_URL}/cupons`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
