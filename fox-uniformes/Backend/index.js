@@ -19,8 +19,33 @@ console.log('Chave JWT:', process.env.JWT_SECRET);
 const app = express();
 
 // Configuração do CORS para produção
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'https://fox-uniformes.vercel.app',
+  'https://fox-uniformes-jva8twi6k-bernardobarcs-projects.vercel.app'
+];
+
+// Adiciona FRONTEND_URL se existir (remove / do final se tiver)
+if (process.env.FRONTEND_URL) {
+  const frontendUrl = process.env.FRONTEND_URL.replace(/\/$/, '');
+  if (!allowedOrigins.includes(frontendUrl)) {
+    allowedOrigins.push(frontendUrl);
+  }
+}
+
+console.log('Allowed Origins:', allowedOrigins);
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost:5000'],
+  origin: function (origin, callback) {
+    // Permite requisições sem origin (como Postman) ou origins permitidas
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('Origin bloqueada pelo CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
