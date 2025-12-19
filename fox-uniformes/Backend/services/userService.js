@@ -8,12 +8,12 @@ const getAllUsers = async () => {
     return await userRepository.getAllUsers();
 };
 
-const saveUser = async ({name, login, dataNascimento, telefone, endereco, role, password}) => {
-    return await userRepository.saveUser({name, login, dataNascimento, telefone, endereco, role, password});
+const saveUser = async ({name, login, email, dataNascimento, telefone, endereco, role, password}) => {
+    return await userRepository.saveUser({name, login, email, dataNascimento, telefone, endereco, role, password});
 };
 
-const updateUser = async (id, {name, login, dataNascimento, telefone, endereco, role, password}) => {
-    return await userRepository.updateUser(id, {name, login, dataNascimento, telefone, endereco, role, password});
+const updateUser = async (id, {name, login, email, dataNascimento, telefone, endereco, role, password}) => {
+    return await userRepository.updateUser(id, {name, login, email, dataNascimento, telefone, endereco, role, password});
 };
 
 const deleteUser = async (id) => {

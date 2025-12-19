@@ -25,7 +25,6 @@ const userSchema = new mongoose.Schema({
   },
   endereco: {
     type: String,
-    required: true,
   },
   role: {
     type: String,

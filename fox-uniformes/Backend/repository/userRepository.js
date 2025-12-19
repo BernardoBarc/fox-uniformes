@@ -17,18 +17,18 @@ const getAllUsers = async () => {
     }
 }
 
-const saveUser = async ({name, login, dataNascimento, telefone, endereco, role, password}) => {
+const saveUser = async ({name, login, email, dataNascimento, telefone, endereco, role, password}) => {
     try {
-        const newUser = new user({name, login, dataNascimento, telefone, endereco, role, password});
+        const newUser = new user({name, login, email, dataNascimento, telefone, endereco, role, password});
         await newUser.save();
         return newUser;
     } catch (error) {
         throw new Error(error);
     }
 }
-const updateUser = async (id, {name, login, dataNascimento, telefone, endereco, role, password}) => {
+const updateUser = async (id, {name, login, email, dataNascimento, telefone, endereco, role, password}) => {
     try {
-        const updatedUser = await user.findByIdAndUpdate(id, {name, login, dataNascimento, telefone, endereco, role, password}, {new: true});
+        const updatedUser = await user.findByIdAndUpdate(id, {name, login, email, dataNascimento, telefone, endereco, role, password}, {new: true});
         return updatedUser;
     } catch (error) {
         throw new Error(error);
