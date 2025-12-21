@@ -14,13 +14,13 @@ const produtoSchema = new mongoose.Schema({
         required: true,
     },
     categoria: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Categoria',
         required: true,
-        enum: ['Polo', 'Camiseta', 'Calça', 'Moletom', 'Jaqueta', 'Boné']
     },
-    tamanho: {
+    imagem: {
         type: String,
-        required: true,
+        required: false,
     },
     createdAt: {
         type: Date,

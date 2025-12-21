@@ -3,6 +3,12 @@ import Pedido from '../models/pedido.js';
 import Cliente from '../models/cliente.js';
 import User from '../models/users.js';
 import { gerarNotaFiscal, gerarNumeroNota, getUrlNotaFiscal } from './notaFiscalService.js';
+import nodemailer from 'nodemailer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuração do Mercado Pago (você precisará configurar suas credenciais)
 // import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
@@ -11,6 +17,31 @@ const MERCADO_PAGO_ACCESS_TOKEN = process.env.MERCADO_PAGO_ACCESS_TOKEN || '';
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || '';
 const WHATSAPP_API_TOKEN = process.env.WHATSAPP_API_TOKEN || '';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+
+// Configuração do Email
+const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
+const EMAIL_PORT = process.env.EMAIL_PORT || 587;
+const EMAIL_USER = process.env.EMAIL_USER || '';
+const EMAIL_PASS = process.env.EMAIL_PASS || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'Fox Uniformes <noreply@foxuniformes.com>';
+
+// Criar transporter do nodemailer
+const createEmailTransporter = () => {
+    if (!EMAIL_USER || !EMAIL_PASS) {
+        console.log('⚠️ Configurações de email não encontradas. Configure EMAIL_USER e EMAIL_PASS no .env');
+        return null;
+    }
+    
+    return nodemailer.createTransport({
+        host: EMAIL_HOST,
+        port: EMAIL_PORT,
+        secure: EMAIL_PORT === 465,
+        auth: {
+            user: EMAIL_USER,
+            pass: EMAIL_PASS,
+        },
+    });
+};
 
 const getAllPagamentos = async () => {
     return await pagamentoRepository.getAllPagamentos();
@@ -31,6 +62,10 @@ const getPagamentosPendentes = async () => {
 // Criar pagamento e gerar link
 const criarPagamento = async (pagamentoData) => {
     const { clienteId, pedidos, valorTotal, telefone, nomeCliente } = pagamentoData;
+
+    // Buscar email do cliente
+    const cliente = await Cliente.findById(clienteId);
+    const emailCliente = cliente?.email;
 
     // Salvar pagamento no banco
     const pagamento = await pagamentoRepository.savePagamento({
@@ -55,8 +90,15 @@ const criarPagamento = async (pagamentoData) => {
         // Atualizar pagamento com o link
         await pagamentoRepository.updatePagamento(pagamento._id, { linkPagamento });
 
-        // Enviar WhatsApp se configurado
-        if (telefone && (WHATSAPP_API_URL || true)) {
+        // Enviar email com link de pagamento (prioridade sobre WhatsApp por enquanto)
+        if (emailCliente) {
+            await enviarEmailPagamento(emailCliente, nomeCliente, valorTotal, linkPagamento);
+            await pagamentoRepository.updatePagamento(pagamento._id, { 
+                emailEnviado: true,
+                emailEnviadoEm: new Date()
+            });
+        } else if (telefone && WHATSAPP_API_URL && WHATSAPP_API_TOKEN) {
+            // Fallback para WhatsApp se não tiver email
             await enviarWhatsApp(telefone, nomeCliente, valorTotal, linkPagamento);
             await pagamentoRepository.updatePagamento(pagamento._id, { 
                 whatsappEnviado: true,
@@ -177,6 +219,198 @@ _Obrigado pela preferência!_`;
     }
 
     return true;
+};
+
+// Enviar link de pagamento via Email
+const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagamento) => {
+    const transporter = createEmailTransporter();
+    
+    if (!transporter) {
+        console.log('=== EMAIL PAGAMENTO (DEBUG - SEM CONFIGURAÇÃO) ===');
+        console.log(`Para: ${email}`);
+        console.log(`Cliente: ${nomeCliente}`);
+        console.log(`Valor: R$ ${valorTotal.toFixed(2)}`);
+        console.log(`Link: ${linkPagamento}`);
+        console.log('================================================');
+        return true;
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
+            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .header { background-color: #f97316; color: white; padding: 30px; text-align: center; }
+            .header h1 { margin: 0; font-size: 28px; }
+            .content { padding: 30px; }
+            .greeting { font-size: 18px; color: #333; margin-bottom: 20px; }
+            .value-box { background-color: #fff7ed; border: 2px solid #f97316; border-radius: 10px; padding: 20px; text-align: center; margin: 20px 0; }
+            .value-label { color: #666; font-size: 14px; margin-bottom: 5px; }
+            .value { color: #f97316; font-size: 32px; font-weight: bold; }
+            .payment-btn { display: inline-block; background-color: #f97316; color: white; text-decoration: none; padding: 15px 40px; border-radius: 8px; font-size: 18px; font-weight: bold; margin: 20px 0; }
+            .payment-btn:hover { background-color: #ea580c; }
+            .methods { background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            .methods h3 { color: #333; margin-top: 0; }
+            .methods ul { color: #666; margin: 0; padding-left: 20px; }
+            .footer { background-color: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; }
+            .footer a { color: #f97316; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🦊 Fox Uniformes</h1>
+            </div>
+            <div class="content">
+                <p class="greeting">Olá <strong>${nomeCliente}</strong>! 👋</p>
+                <p>Seu pedido foi registrado com sucesso! ✅</p>
+                
+                <div class="value-box">
+                    <p class="value-label">Valor Total</p>
+                    <p class="value">R$ ${valorTotal.toFixed(2)}</p>
+                </div>
+                
+                <p style="text-align: center;">Para finalizar, realize o pagamento clicando no botão abaixo:</p>
+                
+                <p style="text-align: center;">
+                    <a href="${linkPagamento}" class="payment-btn">💳 Realizar Pagamento</a>
+                </p>
+                
+                <div class="methods">
+                    <h3>Formas de pagamento disponíveis:</h3>
+                    <ul>
+                        <li>PIX (aprovação instantânea)</li>
+                        <li>Cartão de Crédito (até 12x)</li>
+                    </ul>
+                </div>
+                
+                <p>Após a confirmação do pagamento, iniciaremos a produção do seu pedido.</p>
+                <p>Dúvidas? Responda este email! 😊</p>
+                <p><em>Obrigado pela preferência!</em></p>
+            </div>
+            <div class="footer">
+                <p>Fox Uniformes - Qualidade e estilo para sua equipe</p>
+                <p>Este é um email automático. Por favor, não responda diretamente.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    try {
+        await transporter.sendMail({
+            from: EMAIL_FROM,
+            to: email,
+            subject: `🦊 Fox Uniformes - Link de Pagamento - R$ ${valorTotal.toFixed(2)}`,
+            html: htmlContent,
+        });
+        console.log(`✅ Email de pagamento enviado para ${email}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao enviar email de pagamento:', error);
+        return false;
+    }
+};
+
+// Enviar nota fiscal via Email
+const enviarNotaFiscalEmail = async (email, nomeCliente, numeroNota, urlNotaFiscal, cpfCliente, caminhoNotaFiscal) => {
+    const transporter = createEmailTransporter();
+    const linkAcompanhamento = `${APP_URL}/acompanhar`;
+
+    if (!transporter) {
+        console.log('=== EMAIL NOTA FISCAL (DEBUG - SEM CONFIGURAÇÃO) ===');
+        console.log(`Para: ${email}`);
+        console.log(`Cliente: ${nomeCliente}`);
+        console.log(`Nota: ${numeroNota}`);
+        console.log(`URL: ${urlNotaFiscal}`);
+        console.log('===================================================');
+        return true;
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
+            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .header { background-color: #22c55e; color: white; padding: 30px; text-align: center; }
+            .header h1 { margin: 0; font-size: 28px; }
+            .content { padding: 30px; }
+            .success-icon { font-size: 48px; text-align: center; margin-bottom: 20px; }
+            .greeting { font-size: 18px; color: #333; margin-bottom: 20px; }
+            .info-box { background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 20px; margin: 20px 0; }
+            .btn { display: inline-block; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; font-weight: bold; margin: 10px 5px; }
+            .btn-primary { background-color: #f97316; color: white; }
+            .btn-secondary { background-color: #3b82f6; color: white; }
+            .footer { background-color: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>✅ Pagamento Confirmado!</h1>
+            </div>
+            <div class="content">
+                <div class="success-icon">🎉</div>
+                <p class="greeting">Olá <strong>${nomeCliente}</strong>!</p>
+                <p>Seu pagamento foi processado com sucesso e seu pedido já está em produção!</p>
+                
+                <div class="info-box">
+                    <h3 style="margin-top: 0; color: #22c55e;">📄 Nota Fiscal</h3>
+                    <p><strong>Número:</strong> ${numeroNota}</p>
+                    <p>A nota fiscal está anexada a este email e também pode ser baixada pelo link abaixo.</p>
+                </div>
+                
+                <p style="text-align: center;">
+                    <a href="${urlNotaFiscal}" class="btn btn-primary">📥 Baixar Nota Fiscal</a>
+                    <a href="${linkAcompanhamento}" class="btn btn-secondary">📦 Acompanhar Pedido</a>
+                </p>
+                
+                <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; text-align: center;">
+                    <strong>Para acompanhar seu pedido, use seu CPF:</strong><br>
+                    <span style="font-size: 18px; color: #f97316;">${cpfCliente || 'cadastrado no sistema'}</span>
+                </p>
+                
+                <p>⏳ Em breve você receberá atualizações sobre a entrega.</p>
+                <p><em>Obrigado pela confiança! 🧡</em></p>
+            </div>
+            <div class="footer">
+                <p>🦊 Fox Uniformes - Qualidade e estilo para sua equipe</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    try {
+        const mailOptions = {
+            from: EMAIL_FROM,
+            to: email,
+            subject: `✅ Fox Uniformes - Pagamento Confirmado - Nota Fiscal ${numeroNota}`,
+            html: htmlContent,
+        };
+
+        // Anexar PDF se o caminho existir
+        if (caminhoNotaFiscal) {
+            const fullPath = path.join(__dirname, '..', caminhoNotaFiscal);
+            mailOptions.attachments = [{
+                filename: `nota_fiscal_${numeroNota}.pdf`,
+                path: fullPath,
+            }];
+        }
+
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Email com nota fiscal enviado para ${email}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao enviar email com nota fiscal:', error);
+        return false;
+    }
 };
 
 // Enviar nota fiscal via WhatsApp
@@ -404,8 +638,18 @@ const confirmarPagamentoManual = async (pagamentoId, metodoPagamento = 'PIX', pa
         await atualizarStatusPedidos(pagamento.pedidos, 'Em Progresso');
     }
 
-    // Enviar nota fiscal via WhatsApp
-    if (cliente?.telefone && urlNotaFiscal) {
+    // Enviar nota fiscal via Email (prioridade) ou WhatsApp
+    if (cliente?.email && urlNotaFiscal) {
+        await enviarNotaFiscalEmail(
+            cliente.email,
+            cliente.nome,
+            numeroNota,
+            urlNotaFiscal,
+            cliente.cpf,
+            caminhoNotaFiscal
+        );
+    } else if (cliente?.telefone && urlNotaFiscal) {
+        // Fallback para WhatsApp se não tiver email
         await enviarNotaFiscalWhatsApp(
             cliente.telefone,
             cliente.nome,

@@ -15,9 +15,17 @@ interface Produto {
   _id: string;
   name: string;
   preco: number;
-  categoria: string;
-  tamanho: string;
+  categoria: Categoria | string;
   descricao: string;
+  imagem?: string;
+}
+
+interface Categoria {
+  _id: string;
+  name: string;
+  descricao?: string;
+  ativo: boolean;
+  createdAt: string;
 }
 
 interface Cliente {
@@ -87,7 +95,7 @@ interface Cupom {
   createdAt: string;
 }
 
-type TabType = "dashboard" | "pedidos" | "vendedores" | "produtos" | "clientes" | "trajetos" | "novoVendedor" | "novoProduto" | "cupons" | "novoCupom" | "novoCliente";
+type TabType = "dashboard" | "pedidos" | "vendedores" | "produtos" | "clientes" | "trajetos" | "novoVendedor" | "novoProduto" | "cupons" | "novoCupom" | "novoCliente" | "categorias" | "novaCategoria";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -103,6 +111,7 @@ export default function AdminDashboardPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [cupons, setCupons] = useState<Cupom[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
 
   // Estados para formulários
   const [novoVendedor, setNovoVendedor] = useState({
@@ -121,7 +130,6 @@ export default function AdminDashboardPage() {
     descricao: "",
     preco: 0,
     categoria: "",
-    tamanho: "",
   });
 
   const [novoCupom, setNovoCupom] = useState({
@@ -131,6 +139,11 @@ export default function AdminDashboardPage() {
     dataValidade: "",
     usoMaximo: "",
     notificarClientes: true,
+  });
+
+  const [novaCategoria, setNovaCategoria] = useState({
+    name: "",
+    descricao: "",
   });
 
   const [novoCliente, setNovoCliente] = useState({
@@ -213,6 +226,7 @@ export default function AdminDashboardPage() {
     fetchProdutos();
     fetchVendedores();
     fetchCupons();
+    fetchCategorias();
   };
 
   // Funções para buscar dados (TODOS, não apenas do vendedor)
@@ -297,6 +311,20 @@ export default function AdminDashboardPage() {
       }
     } catch (error) {
       console.error("Erro ao buscar cupons:", error);
+    }
+  };
+
+  const fetchCategorias = async () => {
+    try {
+      const response = await fetch(`${API_URL}/categorias`, {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCategorias(data);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar categorias:", error);
     }
   };
 
@@ -388,7 +416,7 @@ export default function AdminDashboardPage() {
 
       if (response.ok) {
         setMessage({ type: "success", text: "Produto cadastrado com sucesso!" });
-        setNovoProduto({ name: "", descricao: "", preco: 0, categoria: "", tamanho: "" });
+        setNovoProduto({ name: "", descricao: "", preco: 0, categoria: "" });
         fetchProdutos();
         setActiveTab("produtos");
       } else {
@@ -626,6 +654,76 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Função para criar categoria
+  const handleCriarCategoria = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`${API_URL}/categorias`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(novaCategoria),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: "Categoria criada com sucesso!" });
+        setNovaCategoria({ name: "", descricao: "" });
+        fetchCategorias();
+        setActiveTab("categorias");
+      } else {
+        const error = await response.json();
+        setMessage({ type: "error", text: error.error || "Erro ao criar categoria" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para ativar/desativar categoria
+  const handleToggleCategoria = async (categoriaId: string, ativo: boolean) => {
+    try {
+      const response = await fetch(`${API_URL}/categorias/${categoriaId}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ ativo: !ativo }),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: `Categoria ${ativo ? "desativada" : "ativada"} com sucesso!` });
+        fetchCategorias();
+      } else {
+        setMessage({ type: "error", text: "Erro ao atualizar categoria" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    }
+  };
+
+  // Função para deletar categoria
+  const handleDeletarCategoria = async (categoriaId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta categoria? Produtos vinculados podem ser afetados.")) return;
+
+    try {
+      const response = await fetch(`${API_URL}/categorias/${categoriaId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        setMessage({ type: "success", text: "Categoria excluída com sucesso!" });
+        fetchCategorias();
+      } else {
+        setMessage({ type: "error", text: "Erro ao excluir categoria" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     router.push("/");
@@ -725,6 +823,21 @@ export default function AdminDashboardPage() {
               className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoProduto" ? "bg-orange-600" : "hover:bg-gray-700"}`}
             >
               ➕ Novo Produto
+            </button>
+            <button
+              onClick={() => setActiveTab("categorias")}
+              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "categorias" ? "bg-orange-600" : "hover:bg-gray-700"}`}
+            >
+              📂 Categorias
+              {categorias.length > 0 && (
+                <span className="ml-2 bg-purple-500 text-xs px-2 py-1 rounded-full">{categorias.length}</span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("novaCategoria")}
+              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novaCategoria" ? "bg-orange-600" : "hover:bg-gray-700"}`}
+            >
+              ➕ Nova Categoria
             </button>
             <button
               onClick={() => setActiveTab("clientes")}
@@ -1087,7 +1200,6 @@ export default function AdminDashboardPage() {
                     <tr>
                       <th className="px-4 py-3 text-left">Nome</th>
                       <th className="px-4 py-3 text-left">Categoria</th>
-                      <th className="px-4 py-3 text-left">Tamanho</th>
                       <th className="px-4 py-3 text-left">Preço</th>
                       <th className="px-4 py-3 text-left">Ações</th>
                     </tr>
@@ -1101,8 +1213,7 @@ export default function AdminDashboardPage() {
                             <p className="text-sm text-gray-400">{produto.descricao}</p>
                           </div>
                         </td>
-                        <td className="px-4 py-3">{produto.categoria}</td>
-                        <td className="px-4 py-3">{produto.tamanho}</td>
+                        <td className="px-4 py-3">{typeof produto.categoria === 'object' ? produto.categoria?.name : produto.categoria}</td>
                         <td className="px-4 py-3">R$ {produto.preco?.toFixed(2)}</td>
                         <td className="px-4 py-3">
                           <button
@@ -1158,30 +1269,13 @@ export default function AdminDashboardPage() {
                       required
                     >
                       <option value="">Selecione</option>
-                      <option value="Polo">Polo</option>
-                      <option value="Camiseta">Camiseta</option>
-                      <option value="Calça">Calça</option>
-                      <option value="Moletom">Moletom</option>
-                      <option value="Jaqueta">Jaqueta</option>
-                      <option value="Boné">Boné</option>
+                      {categorias.filter(c => c.ativo).map((cat) => (
+                        <option key={cat._id} value={cat._id}>{cat.name}</option>
+                      ))}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Tamanho</label>
-                    <select
-                      value={novoProduto.tamanho}
-                      onChange={(e) => setNovoProduto({ ...novoProduto, tamanho: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    >
-                      <option value="">Selecione</option>
-                      <option value="PP">PP</option>
-                      <option value="P">P</option>
-                      <option value="M">M</option>
-                      <option value="G">G</option>
-                      <option value="GG">GG</option>
-                      <option value="XG">XG</option>
-                    </select>
+                    {categorias.filter(c => c.ativo).length === 0 && (
+                      <p className="text-xs text-yellow-500 mt-1">⚠️ Nenhuma categoria cadastrada. <button type="button" onClick={() => setActiveTab("novaCategoria")} className="underline">Criar uma</button></p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Preço (R$)</label>
@@ -1588,6 +1682,113 @@ export default function AdminDashboardPage() {
                   className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
                 >
                   {loading ? "Cadastrando..." : "👤 Cadastrar Cliente"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Lista de Categorias */}
+          {activeTab === "categorias" && (
+            <div>
+              <h2 className="text-3xl font-bold mb-6">Categorias de Produtos</h2>
+              <div className="bg-gray-800 rounded-xl overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Nome</th>
+                      <th className="px-4 py-3 text-left">Descrição</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Criada em</th>
+                      <th className="px-4 py-3 text-left">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categorias.map((categoria) => (
+                      <tr key={categoria._id} className="border-b border-gray-700 hover:bg-gray-750">
+                        <td className="px-4 py-3">
+                          <span className="font-semibold text-orange-400">{categoria.name}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400">
+                          {categoria.descricao || "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-3 py-1 rounded-full text-xs ${categoria.ativo ? "bg-green-600" : "bg-red-600"}`}>
+                            {categoria.ativo ? "Ativa" : "Inativa"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">
+                          {new Date(categoria.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleToggleCategoria(categoria._id, categoria.ativo)}
+                              className={`px-3 py-1 rounded text-xs ${categoria.ativo ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"}`}
+                            >
+                              {categoria.ativo ? "Desativar" : "Ativar"}
+                            </button>
+                            <button
+                              onClick={() => handleDeletarCategoria(categoria._id)}
+                              className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {categorias.length === 0 && (
+                  <p className="p-4 text-gray-400 text-center">Nenhuma categoria cadastrada. <button onClick={() => setActiveTab("novaCategoria")} className="text-orange-400 underline">Criar primeira categoria</button></p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Criar Nova Categoria */}
+          {activeTab === "novaCategoria" && (
+            <div>
+              <h2 className="text-3xl font-bold mb-6">Criar Nova Categoria</h2>
+              <form onSubmit={handleCriarCategoria} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Nome da Categoria *</label>
+                    <input
+                      type="text"
+                      value={novaCategoria.name}
+                      onChange={(e) => setNovaCategoria({ ...novaCategoria, name: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Ex: Polo, Camiseta, Calça..."
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Descrição (opcional)</label>
+                    <textarea
+                      value={novaCategoria.descricao}
+                      onChange={(e) => setNovaCategoria({ ...novaCategoria, descricao: e.target.value })}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      rows={3}
+                      placeholder="Uma breve descrição desta categoria..."
+                    />
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div className="mt-6 p-4 bg-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-400 mb-2">Preview:</p>
+                  <div className="flex items-center gap-4">
+                    <span className="bg-purple-600 px-4 py-2 rounded-lg font-bold">{novaCategoria.name || "Nome da Categoria"}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
+                >
+                  {loading ? "Criando..." : "📂 Criar Categoria"}
                 </button>
               </form>
             </div>

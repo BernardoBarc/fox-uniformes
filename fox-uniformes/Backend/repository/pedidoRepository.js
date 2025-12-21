@@ -32,9 +32,9 @@ const getPedidosByCliente = async (clienteId) => {
     }
 }
 
-const savePedido = async ({nomeCliente, clienteId, vendedorId, produtoId, quantidade, status, preco, entrega, photo, observacoes}) => {
+const savePedido = async ({nomeCliente, clienteId, vendedorId, produtoId, tamanho, quantidade, status, preco, entrega, photo, observacoes}) => {
     try {
-        const newPedido = new pedido({nomeCliente, clienteId, vendedorId, produtoId, quantidade, status, preco, entrega, photo, observacoes});
+        const newPedido = new pedido({nomeCliente, clienteId, vendedorId, produtoId, tamanho, quantidade, status, preco, entrega, photo, observacoes});
         await newPedido.save();
         return newPedido;
     } catch (error) {

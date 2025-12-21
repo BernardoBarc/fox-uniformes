@@ -6,6 +6,7 @@ import pedidoController from "./pedidoController.js";
 import clienteController from "./clienteController.js";
 import pagamentoController from "./pagamentoController.js";
 import cupomController from "./cupomController.js";
+import categoriaController from "./categoriaController.js";
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.use(pedidoController);
 router.use(clienteController);
 router.use(pagamentoController);
 router.use(cupomController);
+router.use(categoriaController);
 
 
 

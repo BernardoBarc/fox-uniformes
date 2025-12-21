@@ -20,6 +20,11 @@ const pedidoSchema = new mongoose.Schema({
         ref: 'Produto',
         required: true
     },
+    tamanho: {
+        type: String,
+        required: true,
+        enum: ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'Único']
+    },
     quantidade: {
         type: Number,
         required: true

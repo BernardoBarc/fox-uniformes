@@ -14,8 +14,9 @@ interface Produto {
   _id: string;
   name: string;
   preco: number;
-  categoria: string;
-  tamanho: string;
+  categoria: { _id: string; name: string } | string;
+  descricao?: string;
+  imagem?: string;
 }
 
 interface Cliente {
@@ -109,19 +110,44 @@ export default function DashboardPage() {
   const [itemAtual, setItemAtual] = useState({
     categoria: "",
     produtoId: "",
+    tamanho: "",
     quantidade: 1,
     observacoes: "",
   });
   const [fotoItemAtual, setFotoItemAtual] = useState<File | null>(null);
   const [previewFotoAtual, setPreviewFotoAtual] = useState<string | null>(null);
 
+  // Tamanhos disponíveis
+  const tamanhosDisponiveis = ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'Único'];
+
+  // Função auxiliar para obter nome da categoria
+  const getCategoriaName = (categoria: { _id: string; name: string } | string) => {
+    if (typeof categoria === 'object' && categoria !== null) {
+      return categoria.name;
+    }
+    return categoria;
+  };
+
+  // Função auxiliar para obter ID da categoria
+  const getCategoriaId = (categoria: { _id: string; name: string } | string) => {
+    if (typeof categoria === 'object' && categoria !== null) {
+      return categoria._id;
+    }
+    return categoria;
+  };
+
   // Produtos filtrados por categoria
   const produtosFiltrados = itemAtual.categoria 
-    ? produtos.filter(p => p.categoria === itemAtual.categoria)
+    ? produtos.filter(p => getCategoriaId(p.categoria) === itemAtual.categoria)
     : [];
 
-  // Lista de categorias únicas
-  const categorias = [...new Set(produtos.map(p => p.categoria).filter(Boolean))];
+  // Lista de categorias únicas (extrai o objeto categoria de cada produto)
+  const categoriasUnicas = produtos
+    .map(p => p.categoria)
+    .filter((cat): cat is { _id: string; name: string } => typeof cat === 'object' && cat !== null)
+    .filter((cat, index, self) => 
+      index === self.findIndex(c => c._id === cat._id)
+    );
 
   // Total do carrinho
   const totalCarrinho = carrinho.reduce((acc, item) => acc + item.precoTotal, 0);
@@ -347,12 +373,17 @@ export default function DashboardPage() {
       return;
     }
 
+    if (!itemAtual.tamanho) {
+      setMessage({ type: "error", text: "Selecione um tamanho" });
+      return;
+    }
+
     const novoItem: ItemCarrinho = {
       id: Date.now().toString(),
       produtoId: produto._id,
       produtoNome: produto.name,
-      categoria: produto.categoria,
-      tamanho: produto.tamanho,
+      categoria: getCategoriaName(produto.categoria),
+      tamanho: itemAtual.tamanho,
       quantidade: itemAtual.quantidade,
       precoUnitario: produto.preco,
       precoTotal: produto.preco * itemAtual.quantidade,
@@ -362,7 +393,7 @@ export default function DashboardPage() {
     };
 
     setCarrinho([...carrinho, novoItem]);
-    setItemAtual({ categoria: "", produtoId: "", quantidade: 1, observacoes: "" });
+    setItemAtual({ categoria: "", produtoId: "", tamanho: "", quantidade: 1, observacoes: "" });
     setFotoItemAtual(null);
     setPreviewFotoAtual(null);
     setMessage({ type: "success", text: "Item adicionado ao carrinho!" });
@@ -529,6 +560,7 @@ export default function DashboardPage() {
         formData.append("telefoneCliente", novoPedido.telefoneCliente);
         formData.append("clienteId", clienteSelecionado._id);
         formData.append("produtoId", item.produtoId);
+        formData.append("tamanho", item.tamanho);
         formData.append("quantidade", item.quantidade.toString());
         formData.append("preco", precoComDesconto.toString());
         formData.append("precoOriginal", item.precoTotal.toString());
@@ -1048,9 +1080,9 @@ export default function DashboardPage() {
                           className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
                         >
                           <option value="">Selecione uma categoria</option>
-                          {categorias.map((categoria) => (
-                            <option key={categoria} value={categoria}>
-                              {categoria}
+                          {categoriasUnicas.map((categoria) => (
+                            <option key={categoria._id} value={categoria._id}>
+                              {categoria.name}
                             </option>
                           ))}
                         </select>
@@ -1070,13 +1102,33 @@ export default function DashboardPage() {
                           </option>
                           {produtosFiltrados.map((produto) => (
                             <option key={produto._id} value={produto._id}>
-                              {produto.name} - R$ {produto.preco?.toFixed(2)} ({produto.tamanho})
+                              {produto.name} - R$ {produto.preco?.toFixed(2)}
                             </option>
                           ))}
                         </select>
                         {itemAtual.categoria && produtosFiltrados.length === 0 && (
                           <p className="text-xs text-yellow-400 mt-1">Nenhum produto nesta categoria</p>
                         )}
+                      </div>
+
+                      {/* Tamanho */}
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Tamanho</label>
+                        <select
+                          value={itemAtual.tamanho}
+                          onChange={(e) => setItemAtual({ ...itemAtual, tamanho: e.target.value })}
+                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          disabled={!itemAtual.produtoId}
+                        >
+                          <option value="">
+                            {itemAtual.produtoId ? "Selecione o tamanho" : "Selecione um produto primeiro"}
+                          </option>
+                          {tamanhosDisponiveis.map((tam) => (
+                            <option key={tam} value={tam}>
+                              {tam}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Quantidade */}
