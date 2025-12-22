@@ -17,7 +17,8 @@ const __dirname = path.dirname(__filename);
 const MERCADO_PAGO_ACCESS_TOKEN = process.env.MERCADO_PAGO_ACCESS_TOKEN || '';
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || '';
 const WHATSAPP_API_TOKEN = process.env.WHATSAPP_API_TOKEN || '';
-const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const BACKEND_URL = process.env.BACKEND_URL || process.env.APP_URL || 'http://localhost:5000';
 
 // Configuração do Resend (Email)
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
@@ -72,8 +73,8 @@ const criarPagamento = async (pagamentoData) => {
         if (MERCADO_PAGO_ACCESS_TOKEN) {
             linkPagamento = await criarPreferenciaMercadoPago(pagamento, nomeCliente, valorTotal);
         } else {
-            // Link temporário para página de pagamento interna
-            linkPagamento = `${APP_URL}/pagamento/${pagamento._id}`;
+            // Link temporário para página de pagamento interna (FRONTEND)
+            linkPagamento = `${FRONTEND_URL}/pagamento/${pagamento._id}`;
         }
 
         // Atualizar pagamento com o link
@@ -127,13 +128,13 @@ const criarPreferenciaMercadoPago = async (pagamento, nomeCliente, valorTotal) =
             installments: 12, // Máximo de parcelas
         },
         back_urls: {
-            success: `${APP_URL}/pagamento/sucesso/${pagamento._id}`,
-            failure: `${APP_URL}/pagamento/falha/${pagamento._id}`,
-            pending: `${APP_URL}/pagamento/pendente/${pagamento._id}`,
+            success: `${FRONTEND_URL}/pagamento/sucesso/${pagamento._id}`,
+            failure: `${FRONTEND_URL}/pagamento/falha/${pagamento._id}`,
+            pending: `${FRONTEND_URL}/pagamento/pendente/${pagamento._id}`,
         },
         auto_return: 'approved',
         external_reference: pagamento._id.toString(),
-        notification_url: `${APP_URL}/api/webhook/mercadopago`,
+        notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
     };
 
     const response = await preference.create({ body: preferenceData });
@@ -147,7 +148,7 @@ const criarPreferenciaMercadoPago = async (pagamento, nomeCliente, valorTotal) =
     */
 
     // Retorna link temporário enquanto não tem Mercado Pago configurado
-    return `${APP_URL}/pagamento/${pagamento._id}`;
+    return `${FRONTEND_URL}/pagamento/${pagamento._id}`;
 };
 
 // Enviar mensagem via WhatsApp
@@ -294,7 +295,7 @@ const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagament
 // Enviar nota fiscal via Email (Resend)
 const enviarNotaFiscalEmail = async (email, nomeCliente, numeroNota, urlNotaFiscal, cpfCliente, caminhoNotaFiscal) => {
     const resend = createResendClient();
-    const linkAcompanhamento = `${APP_URL}/acompanhar`;
+    const linkAcompanhamento = `${FRONTEND_URL}/acompanhar`;
 
     if (!resend) {
         console.log('=== EMAIL NOTA FISCAL (DEBUG - SEM CONFIGURAÇÃO) ===');
@@ -391,7 +392,7 @@ const enviarNotaFiscalWhatsApp = async (telefone, nomeCliente, numeroNota, urlNo
         ? telefoneFormatado 
         : `55${telefoneFormatado}`;
 
-    const linkAcompanhamento = `${APP_URL}/acompanhar`;
+    const linkAcompanhamento = `${FRONTEND_URL}/acompanhar`;
 
     const mensagem = `🦊 *Fox Uniformes*
 
@@ -584,7 +585,7 @@ const confirmarPagamentoManual = async (pagamentoId, metodoPagamento = 'PIX', pa
             dataEmissao: new Date(),
         });
 
-        urlNotaFiscal = `${APP_URL}${getUrlNotaFiscal(caminhoNotaFiscal)}`;
+        urlNotaFiscal = `${BACKEND_URL}${getUrlNotaFiscal(caminhoNotaFiscal)}`;
         console.log(`✅ Nota fiscal gerada: ${numeroNota}`);
     } catch (error) {
         console.error('Erro ao gerar nota fiscal:', error);
