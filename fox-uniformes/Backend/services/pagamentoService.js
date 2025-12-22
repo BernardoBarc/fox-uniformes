@@ -7,7 +7,7 @@ import { Resend } from 'resend';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import mercadopago from 'mercadopago';
+import mercadopago, { MercadoPagoConfig, Payment } from 'mercadopago';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,10 +25,9 @@ const BACKEND_URL = process.env.BACKEND_URL || process.env.APP_URL || 'http://lo
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Fox Uniformes <onboarding@resend.dev>';
 
-// Configuração Mercado Pago SDK
-mercadopago.configure({
-    access_token: MERCADO_PAGO_ACCESS_TOKEN
-});
+// Instância Mercado Pago v3+
+const mpClient = new MercadoPagoConfig({ accessToken: MERCADO_PAGO_ACCESS_TOKEN });
+const paymentInstance = new Payment(mpClient);
 
 // Criar cliente Resend
 const createResendClient = () => {
@@ -685,7 +684,7 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
         external_reference: pagamento._id.toString(),
         notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
     };
-    const result = await mercadopago.payment.create({ body });
+    const result = await paymentInstance.create({ body });
     const { id, status, point_of_interaction } = result.body;
     const pixInfo = point_of_interaction?.transaction_data || {};
     // Salva info PIX no pagamento
