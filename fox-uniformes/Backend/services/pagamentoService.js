@@ -3,8 +3,9 @@ import Pedido from '../models/pedido.js';
 import Cliente from '../models/cliente.js';
 import User from '../models/users.js';
 import { gerarNotaFiscal, gerarNumeroNota, getUrlNotaFiscal } from './notaFiscalService.js';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,29 +19,17 @@ const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || '';
 const WHATSAPP_API_TOKEN = process.env.WHATSAPP_API_TOKEN || '';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 
-// Configuração do Email
-const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
-const EMAIL_PORT = process.env.EMAIL_PORT || 587;
-const EMAIL_USER = process.env.EMAIL_USER || '';
-const EMAIL_PASS = process.env.EMAIL_PASS || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || 'Fox Uniformes <noreply@foxuniformes.com>';
+// Configuração do Resend (Email)
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'Fox Uniformes <onboarding@resend.dev>';
 
-// Criar transporter do nodemailer
-const createEmailTransporter = () => {
-    if (!EMAIL_USER || !EMAIL_PASS) {
-        console.log('⚠️ Configurações de email não encontradas. Configure EMAIL_USER e EMAIL_PASS no .env');
+// Criar cliente Resend
+const createResendClient = () => {
+    if (!RESEND_API_KEY) {
+        console.log('⚠️ RESEND_API_KEY não configurada. Configure no .env para enviar emails.');
         return null;
     }
-    
-    return nodemailer.createTransport({
-        host: EMAIL_HOST,
-        port: EMAIL_PORT,
-        secure: EMAIL_PORT === 465,
-        auth: {
-            user: EMAIL_USER,
-            pass: EMAIL_PASS,
-        },
-    });
+    return new Resend(RESEND_API_KEY);
 };
 
 const getAllPagamentos = async () => {
@@ -221,11 +210,11 @@ _Obrigado pela preferência!_`;
     return true;
 };
 
-// Enviar link de pagamento via Email
+// Enviar link de pagamento via Email (Resend)
 const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagamento) => {
-    const transporter = createEmailTransporter();
+    const resend = createResendClient();
     
-    if (!transporter) {
+    if (!resend) {
         console.log('=== EMAIL PAGAMENTO (DEBUG - SEM CONFIGURAÇÃO) ===');
         console.log(`Para: ${email}`);
         console.log(`Cliente: ${nomeCliente}`);
@@ -240,48 +229,30 @@ const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagament
     <html>
     <head>
         <meta charset="UTF-8">
-        <style>
-            body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-            .header { background-color: #f97316; color: white; padding: 30px; text-align: center; }
-            .header h1 { margin: 0; font-size: 28px; }
-            .content { padding: 30px; }
-            .greeting { font-size: 18px; color: #333; margin-bottom: 20px; }
-            .value-box { background-color: #fff7ed; border: 2px solid #f97316; border-radius: 10px; padding: 20px; text-align: center; margin: 20px 0; }
-            .value-label { color: #666; font-size: 14px; margin-bottom: 5px; }
-            .value { color: #f97316; font-size: 32px; font-weight: bold; }
-            .payment-btn { display: inline-block; background-color: #f97316; color: white; text-decoration: none; padding: 15px 40px; border-radius: 8px; font-size: 18px; font-weight: bold; margin: 20px 0; }
-            .payment-btn:hover { background-color: #ea580c; }
-            .methods { background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0; }
-            .methods h3 { color: #333; margin-top: 0; }
-            .methods ul { color: #666; margin: 0; padding-left: 20px; }
-            .footer { background-color: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; }
-            .footer a { color: #f97316; }
-        </style>
     </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>🦊 Fox Uniformes</h1>
+    <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="background-color: #f97316; color: white; padding: 30px; text-align: center;">
+                <h1 style="margin: 0; font-size: 28px;">🦊 Fox Uniformes</h1>
             </div>
-            <div class="content">
-                <p class="greeting">Olá <strong>${nomeCliente}</strong>! 👋</p>
+            <div style="padding: 30px;">
+                <p style="font-size: 18px; color: #333; margin-bottom: 20px;">Olá <strong>${nomeCliente}</strong>! 👋</p>
                 <p>Seu pedido foi registrado com sucesso! ✅</p>
                 
-                <div class="value-box">
-                    <p class="value-label">Valor Total</p>
-                    <p class="value">R$ ${valorTotal.toFixed(2)}</p>
+                <div style="background-color: #fff7ed; border: 2px solid #f97316; border-radius: 10px; padding: 20px; text-align: center; margin: 20px 0;">
+                    <p style="color: #666; font-size: 14px; margin-bottom: 5px;">Valor Total</p>
+                    <p style="color: #f97316; font-size: 32px; font-weight: bold; margin: 0;">R$ ${valorTotal.toFixed(2)}</p>
                 </div>
                 
                 <p style="text-align: center;">Para finalizar, realize o pagamento clicando no botão abaixo:</p>
                 
                 <p style="text-align: center;">
-                    <a href="${linkPagamento}" class="payment-btn">💳 Realizar Pagamento</a>
+                    <a href="${linkPagamento}" style="display: inline-block; background-color: #f97316; color: white; text-decoration: none; padding: 15px 40px; border-radius: 8px; font-size: 18px; font-weight: bold; margin: 20px 0;">💳 Realizar Pagamento</a>
                 </p>
                 
-                <div class="methods">
-                    <h3>Formas de pagamento disponíveis:</h3>
-                    <ul>
+                <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="color: #333; margin-top: 0;">Formas de pagamento disponíveis:</h3>
+                    <ul style="color: #666; margin: 0; padding-left: 20px;">
                         <li>PIX (aprovação instantânea)</li>
                         <li>Cartão de Crédito (até 12x)</li>
                     </ul>
@@ -291,9 +262,8 @@ const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagament
                 <p>Dúvidas? Responda este email! 😊</p>
                 <p><em>Obrigado pela preferência!</em></p>
             </div>
-            <div class="footer">
-                <p>Fox Uniformes - Qualidade e estilo para sua equipe</p>
-                <p>Este é um email automático. Por favor, não responda diretamente.</p>
+            <div style="background-color: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px;">
+                <p>🦊 Fox Uniformes - Qualidade e estilo para sua equipe</p>
             </div>
         </div>
     </body>
@@ -301,13 +271,19 @@ const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagament
     `;
 
     try {
-        await transporter.sendMail({
+        const { data, error } = await resend.emails.send({
             from: EMAIL_FROM,
             to: email,
             subject: `🦊 Fox Uniformes - Link de Pagamento - R$ ${valorTotal.toFixed(2)}`,
             html: htmlContent,
         });
-        console.log(`✅ Email de pagamento enviado para ${email}`);
+
+        if (error) {
+            console.error('❌ Erro ao enviar email de pagamento:', error);
+            return false;
+        }
+
+        console.log(`✅ Email de pagamento enviado para ${email} (ID: ${data?.id})`);
         return true;
     } catch (error) {
         console.error('❌ Erro ao enviar email de pagamento:', error);
@@ -315,12 +291,12 @@ const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagament
     }
 };
 
-// Enviar nota fiscal via Email
+// Enviar nota fiscal via Email (Resend)
 const enviarNotaFiscalEmail = async (email, nomeCliente, numeroNota, urlNotaFiscal, cpfCliente, caminhoNotaFiscal) => {
-    const transporter = createEmailTransporter();
+    const resend = createResendClient();
     const linkAcompanhamento = `${APP_URL}/acompanhar`;
 
-    if (!transporter) {
+    if (!resend) {
         console.log('=== EMAIL NOTA FISCAL (DEBUG - SEM CONFIGURAÇÃO) ===');
         console.log(`Para: ${email}`);
         console.log(`Cliente: ${nomeCliente}`);
@@ -335,40 +311,26 @@ const enviarNotaFiscalEmail = async (email, nomeCliente, numeroNota, urlNotaFisc
     <html>
     <head>
         <meta charset="UTF-8">
-        <style>
-            body { font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-            .header { background-color: #22c55e; color: white; padding: 30px; text-align: center; }
-            .header h1 { margin: 0; font-size: 28px; }
-            .content { padding: 30px; }
-            .success-icon { font-size: 48px; text-align: center; margin-bottom: 20px; }
-            .greeting { font-size: 18px; color: #333; margin-bottom: 20px; }
-            .info-box { background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 20px; margin: 20px 0; }
-            .btn { display: inline-block; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; font-weight: bold; margin: 10px 5px; }
-            .btn-primary { background-color: #f97316; color: white; }
-            .btn-secondary { background-color: #3b82f6; color: white; }
-            .footer { background-color: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; }
-        </style>
     </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>✅ Pagamento Confirmado!</h1>
+    <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="background-color: #22c55e; color: white; padding: 30px; text-align: center;">
+                <h1 style="margin: 0; font-size: 28px;">✅ Pagamento Confirmado!</h1>
             </div>
-            <div class="content">
-                <div class="success-icon">🎉</div>
-                <p class="greeting">Olá <strong>${nomeCliente}</strong>!</p>
+            <div style="padding: 30px;">
+                <div style="font-size: 48px; text-align: center; margin-bottom: 20px;">🎉</div>
+                <p style="font-size: 18px; color: #333; margin-bottom: 20px;">Olá <strong>${nomeCliente}</strong>!</p>
                 <p>Seu pagamento foi processado com sucesso e seu pedido já está em produção!</p>
                 
-                <div class="info-box">
+                <div style="background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 20px; margin: 20px 0;">
                     <h3 style="margin-top: 0; color: #22c55e;">📄 Nota Fiscal</h3>
                     <p><strong>Número:</strong> ${numeroNota}</p>
-                    <p>A nota fiscal está anexada a este email e também pode ser baixada pelo link abaixo.</p>
+                    <p>A nota fiscal pode ser baixada pelo link abaixo.</p>
                 </div>
                 
                 <p style="text-align: center;">
-                    <a href="${urlNotaFiscal}" class="btn btn-primary">📥 Baixar Nota Fiscal</a>
-                    <a href="${linkAcompanhamento}" class="btn btn-secondary">📦 Acompanhar Pedido</a>
+                    <a href="${urlNotaFiscal}" style="display: inline-block; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; font-weight: bold; margin: 10px 5px; background-color: #f97316; color: white;">📥 Baixar Nota Fiscal</a>
+                    <a href="${linkAcompanhamento}" style="display: inline-block; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; font-weight: bold; margin: 10px 5px; background-color: #3b82f6; color: white;">📦 Acompanhar Pedido</a>
                 </p>
                 
                 <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; text-align: center;">
@@ -379,7 +341,7 @@ const enviarNotaFiscalEmail = async (email, nomeCliente, numeroNota, urlNotaFisc
                 <p>⏳ Em breve você receberá atualizações sobre a entrega.</p>
                 <p><em>Obrigado pela confiança! 🧡</em></p>
             </div>
-            <div class="footer">
+            <div style="background-color: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px;">
                 <p>🦊 Fox Uniformes - Qualidade e estilo para sua equipe</p>
             </div>
         </div>
@@ -388,7 +350,7 @@ const enviarNotaFiscalEmail = async (email, nomeCliente, numeroNota, urlNotaFisc
     `;
 
     try {
-        const mailOptions = {
+        const emailOptions = {
             from: EMAIL_FROM,
             to: email,
             subject: `✅ Fox Uniformes - Pagamento Confirmado - Nota Fiscal ${numeroNota}`,
@@ -398,14 +360,23 @@ const enviarNotaFiscalEmail = async (email, nomeCliente, numeroNota, urlNotaFisc
         // Anexar PDF se o caminho existir
         if (caminhoNotaFiscal) {
             const fullPath = path.join(__dirname, '..', caminhoNotaFiscal);
-            mailOptions.attachments = [{
-                filename: `nota_fiscal_${numeroNota}.pdf`,
-                path: fullPath,
-            }];
+            if (fs.existsSync(fullPath)) {
+                const pdfContent = fs.readFileSync(fullPath);
+                emailOptions.attachments = [{
+                    filename: `nota_fiscal_${numeroNota}.pdf`,
+                    content: pdfContent,
+                }];
+            }
         }
 
-        await transporter.sendMail(mailOptions);
-        console.log(`✅ Email com nota fiscal enviado para ${email}`);
+        const { data, error } = await resend.emails.send(emailOptions);
+
+        if (error) {
+            console.error('❌ Erro ao enviar email com nota fiscal:', error);
+            return false;
+        }
+
+        console.log(`✅ Email com nota fiscal enviado para ${email} (ID: ${data?.id})`);
         return true;
     } catch (error) {
         console.error('❌ Erro ao enviar email com nota fiscal:', error);

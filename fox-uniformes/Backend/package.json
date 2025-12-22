@@ -16,8 +16,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.3",
     "multer": "^2.0.2",
-    "nodemailer": "^6.9.16",
-    "pdfkit": "^0.17.2"
+    "pdfkit": "^0.17.2",
+    "resend": "^6.6.0"
   },
   "engines": {
     "node": ">=18.0.0"
