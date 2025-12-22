@@ -117,13 +117,22 @@ router.post('/pagamento/:id/cancelar', async (req, res) => {
 });
 
 // Webhook do Mercado Pago
-router.post('/webhook/mercadopago', async (req, res) => {
+router.post('/webhook/mercadopago', express.json(), async (req, res) => {
     try {
-        const resultado = await pagamentoService.processarWebhookPagamento(req.body);
-        res.json(resultado);
+        const { type, data } = req.body;
+        if (type === 'payment' && data && data.id) {
+            // Buscar detalhes do pagamento no Mercado Pago
+            const mpPayment = await import('mercadopago').then(mp => mp.default.payment.findById(data.id));
+            const payment = mpPayment.body;
+            if (payment.status === 'approved' && payment.payment_method_id === 'pix') {
+                // Atualizar status do pagamento no banco
+                await pagamentoService.confirmarPagamentoPorExternalId(payment.external_reference, payment.id);
+            }
+        }
+        res.status(200).send('OK');
     } catch (error) {
-        console.error('Erro ao processar webhook:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        console.error('Erro no webhook Mercado Pago:', error);
+        res.status(500).send('Erro interno');
     }
 });
 

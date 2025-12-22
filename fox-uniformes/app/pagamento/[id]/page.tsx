@@ -41,6 +41,8 @@ export default function PagamentoPage() {
   const [metodoPagamento, setMetodoPagamento] = useState<"pix" | "cartao">("pix");
   const [parcelas, setParcelas] = useState(1);
   const [processando, setProcessando] = useState(false);
+  const [pixData, setPixData] = useState<null | { qr_code: string; qr_code_base64: string; copia_cola: string }>(null);
+  const [aguardandoPix, setAguardandoPix] = useState(false);
 
   useEffect(() => {
     const fetchPagamento = async () => {
@@ -73,35 +75,39 @@ export default function PagamentoPage() {
 
   const handlePagar = async () => {
     setProcessando(true);
-    
+    setAguardandoPix(false);
+    setPixData(null);
     try {
-      // Confirmar pagamento (em produção, isso seria feito após o gateway confirmar)
-      const response = await fetch(`${API_URL}/pagamento/${pagamentoId}/confirmar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          metodoPagamento: metodoPagamento === 'pix' ? 'PIX' : 'Cartão de Crédito',
-          parcelas: metodoPagamento === 'cartao' ? parcelas : 1,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Atualizar estado local
-        setPagamento(prev => prev ? { ...prev, status: 'Aprovado' } : null);
-        
-        // Mostrar mensagem de sucesso
-        alert(`✅ Pagamento confirmado com sucesso!\n\n📄 Nota Fiscal: ${data.notaFiscal?.numero || 'Gerada'}\n\nVocê receberá a nota fiscal via WhatsApp em instantes.`);
+      if (metodoPagamento === 'pix') {
+        if (!pagamento) return;
+        const response = await fetch(`${API_URL}/pagamento/criar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clienteId: pagamento.clienteId,
+            pedidos: pagamento.pedidos.map(p => p._id),
+            valorTotal: pagamento.valorTotal,
+            telefone: pagamento.clienteId?.telefone,
+            nomeCliente: pagamento.clienteId?.nome,
+            metodoPagamento: 'PIX',
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.pixData) {
+            setPixData(data.pixData);
+            setAguardandoPix(true);
+          } else {
+            alert('Erro ao gerar cobrança PIX. Tente novamente.');
+          }
+        } else {
+          alert('Erro ao gerar cobrança PIX.');
+        }
       } else {
-        const errorData = await response.json();
-        alert(`❌ Erro ao processar pagamento: ${errorData.error || 'Tente novamente'}`);
+        alert('Pagamento com cartão ainda não implementado.');
       }
     } catch (error) {
-      console.error('Erro ao processar pagamento:', error);
-      alert('❌ Erro ao conectar com o servidor. Tente novamente.');
+      alert('Erro ao conectar com o servidor.');
     } finally {
       setProcessando(false);
     }
@@ -138,6 +144,24 @@ export default function PagamentoPage() {
           <p className="text-gray-500 text-sm">
             Seu pedido está sendo preparado e em breve você receberá atualizações.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (aguardandoPix && pixData) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div className="bg-gray-800 p-8 rounded-xl text-center max-w-md">
+          <h1 className="text-2xl font-bold text-green-400 mb-4">Pagamento via PIX</h1>
+          <p className="mb-4 text-gray-300">Escaneie o QR Code abaixo ou copie a chave para pagar:</p>
+          <img src={`data:image/png;base64,${pixData.qr_code_base64}`} alt="QR Code PIX" className="mx-auto mb-4 w-56 h-56 rounded-lg border-4 border-green-500" />
+          <div className="bg-gray-700 rounded-lg p-3 mb-4">
+            <span className="block text-xs text-gray-400 mb-1">Chave copia e cola:</span>
+            <span className="text-green-300 break-all select-all text-sm">{pixData.copia_cola}</span>
+          </div>
+          <p className="text-gray-400 mb-2">Após o pagamento, a confirmação é automática!</p>
+          <p className="text-gray-500 text-xs">Se já pagou, aguarde alguns segundos e recarregue a página.</p>
         </div>
       </div>
     );

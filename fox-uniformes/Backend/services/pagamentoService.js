@@ -7,6 +7,7 @@ import { Resend } from 'resend';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import mercadopago from 'mercadopago';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,11 @@ const BACKEND_URL = process.env.BACKEND_URL || process.env.APP_URL || 'http://lo
 // Configuração do Resend (Email)
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Fox Uniformes <onboarding@resend.dev>';
+
+// Configuração Mercado Pago SDK
+mercadopago.configure({
+    access_token: MERCADO_PAGO_ACCESS_TOKEN
+});
 
 // Criar cliente Resend
 const createResendClient = () => {
@@ -51,12 +57,9 @@ const getPagamentosPendentes = async () => {
 
 // Criar pagamento e gerar link
 const criarPagamento = async (pagamentoData) => {
-    const { clienteId, pedidos, valorTotal, telefone, nomeCliente } = pagamentoData;
-
-    // Buscar email do cliente
+    const { clienteId, pedidos, valorTotal, telefone, nomeCliente, metodoPagamento } = pagamentoData;
     const cliente = await Cliente.findById(clienteId);
     const emailCliente = cliente?.email;
-
     // Salvar pagamento no banco
     const pagamento = await pagamentoRepository.savePagamento({
         clienteId,
@@ -64,43 +67,46 @@ const criarPagamento = async (pagamentoData) => {
         valorTotal,
         status: 'Pendente',
     });
-
-    // Gerar link de pagamento
     let linkPagamento = '';
-    
+    let pixData = null;
     try {
-        // Se tiver Mercado Pago configurado, criar preferência de pagamento
-        if (MERCADO_PAGO_ACCESS_TOKEN) {
-            linkPagamento = await criarPreferenciaMercadoPago(pagamento, nomeCliente, valorTotal);
+        if (MERCADO_PAGO_ACCESS_TOKEN && metodoPagamento === 'PIX') {
+            // Criação real de pagamento PIX
+            pixData = await criarPagamentoPixMercadoPago(pagamento, nomeCliente, valorTotal);
+            linkPagamento = null; // Não há link, só QR Code/chave
+        } else if (MERCADO_PAGO_ACCESS_TOKEN) {
+            // Aqui você pode implementar cartão futuramente
+            // Por enquanto, só PIX real
+            throw new Error('Pagamento com cartão ainda não implementado');
         } else {
-            // Link temporário para página de pagamento interna (FRONTEND)
             linkPagamento = `${FRONTEND_URL}/pagamento/${pagamento._id}`;
         }
-
-        // Atualizar pagamento com o link
-        await pagamentoRepository.updatePagamento(pagamento._id, { linkPagamento });
-
-        // Enviar email com link de pagamento (prioridade sobre WhatsApp por enquanto)
+        // Atualizar pagamento com o link (se não for PIX)
+        if (linkPagamento) {
+            await pagamentoRepository.updatePagamento(pagamento._id, { linkPagamento });
+        }
+        // Enviar email com instruções de pagamento
         if (emailCliente) {
-            await enviarEmailPagamento(emailCliente, nomeCliente, valorTotal, linkPagamento);
+            if (pixData) {
+                await enviarEmailPagamentoPIX(emailCliente, nomeCliente, valorTotal, pixData);
+            } else {
+                await enviarEmailPagamento(emailCliente, nomeCliente, valorTotal, linkPagamento);
+            }
             await pagamentoRepository.updatePagamento(pagamento._id, { 
                 emailEnviado: true,
                 emailEnviadoEm: new Date()
             });
         } else if (telefone && WHATSAPP_API_URL && WHATSAPP_API_TOKEN) {
-            // Fallback para WhatsApp se não tiver email
             await enviarWhatsApp(telefone, nomeCliente, valorTotal, linkPagamento);
             await pagamentoRepository.updatePagamento(pagamento._id, { 
                 whatsappEnviado: true,
                 whatsappEnviadoEm: new Date()
             });
         }
-
     } catch (error) {
-        console.error('Erro ao gerar link de pagamento:', error);
+        console.error('Erro ao gerar pagamento:', error);
     }
-
-    return { pagamento, linkPagamento };
+    return { pagamento, linkPagamento, pixData };
 };
 
 // Criar preferência no Mercado Pago
@@ -634,11 +640,123 @@ const confirmarPagamentoManual = async (pagamentoId, metodoPagamento = 'PIX', pa
     return { pagamento: pagamentoAtualizado, notaFiscal: { numero: numeroNota, url: urlNotaFiscal } };
 };
 
+// Confirma pagamento por externalId (usado pelo webhook)
+const confirmarPagamentoPorExternalId = async (external_reference, paymentId) => {
+    // Busca o pagamento pelo external_reference (que é o _id do pagamento)
+    const pagamento = await pagamentoRepository.getPagamentoById(external_reference);
+    if (!pagamento) return;
+    // Atualiza status
+    await pagamentoRepository.updatePagamento(pagamento._id, {
+        status: 'Aprovado',
+        pagamentoConfirmadoEm: new Date(),
+        externalId: paymentId
+    });
+    // Atualiza status dos pedidos vinculados
+    if (pagamento.pedidos && pagamento.pedidos.length > 0) {
+        await atualizarStatusPedidos(pagamento.pedidos, 'Em Progresso');
+    }
+    // Envia nota fiscal por email
+    if (pagamento.clienteId) {
+        const cliente = await Cliente.findById(pagamento.clienteId);
+        if (cliente?.email && pagamento.notaFiscal?.url) {
+            await enviarNotaFiscalEmail(
+                cliente.email,
+                cliente.nome,
+                pagamento.notaFiscal.numero,
+                pagamento.notaFiscal.url,
+                cliente.cpf,
+                pagamento.notaFiscal.caminho
+            );
+        }
+    }
+};
+
+// Criação de pagamento PIX real Mercado Pago
+const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) => {
+    // Docs: https://www.mercadopago.com.br/developers/pt/docs/checkout-api/pix/introduction
+    const body = {
+        transaction_amount: valorTotal,
+        description: `Pedido Fox Uniformes - ${nomeCliente}`,
+        payment_method_id: 'pix',
+        payer: {
+            email: pagamento.clienteId?.email || 'comprador@foxuniformes.com',
+            first_name: nomeCliente,
+        },
+        external_reference: pagamento._id.toString(),
+        notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
+    };
+    const result = await mercadopago.payment.create({ body });
+    const { id, status, point_of_interaction } = result.body;
+    const pixInfo = point_of_interaction?.transaction_data || {};
+    // Salva info PIX no pagamento
+    await pagamentoRepository.updatePagamento(pagamento._id, {
+        externalId: id,
+        status: 'Aguardando Pagamento',
+        pix: {
+            qr_code: pixInfo.qr_code,
+            qr_code_base64: pixInfo.qr_code_base64,
+            copia_cola: pixInfo.qr_code,
+        },
+        gatewayResponse: result.body
+    });
+    return {
+        qr_code: pixInfo.qr_code,
+        qr_code_base64: pixInfo.qr_code_base64,
+        copia_cola: pixInfo.qr_code,
+        payment_id: id,
+        status,
+    };
+};
+
 // Cancelar pagamento
 const cancelarPagamento = async (pagamentoId) => {
     return await pagamentoRepository.updatePagamento(pagamentoId, {
         status: 'Cancelado',
     });
+};
+
+// Enviar email com instruções de pagamento PIX
+const enviarEmailPagamentoPIX = async (email, nomeCliente, valorTotal, pixData) => {
+    const resend = createResendClient();
+    if (!resend) {
+        console.log('=== EMAIL PIX (DEBUG - SEM CONFIGURAÇÃO) ===');
+        console.log(`Para: ${email}`);
+        console.log(`Cliente: ${nomeCliente}`);
+        console.log(`Valor: R$ ${valorTotal.toFixed(2)}`);
+        console.log(`PIX:`, pixData);
+        return true;
+    }
+    const htmlContent = `
+    <html><body style="font-family: Arial, sans-serif;">
+    <h2>Pagamento via PIX</h2>
+    <p>Olá <b>${nomeCliente}</b>!</p>
+    <p>Para pagar seu pedido, utilize o QR Code abaixo ou copie a chave PIX:</p>
+    <div style="text-align:center;">
+        <img src="data:image/png;base64,${pixData.qr_code_base64}" alt="QR Code PIX" style="width:220px;height:220px;"/>
+        <p><b>Chave copia e cola:</b><br><span style="font-size:16px;">${pixData.copia_cola}</span></p>
+    </div>
+    <p>Valor: <b>R$ ${valorTotal.toFixed(2)}</b></p>
+    <p>Assim que o pagamento for confirmado, seu pedido será processado automaticamente.</p>
+    <p>Obrigado!</p>
+    </body></html>
+    `;
+    try {
+        const { data, error } = await resend.emails.send({
+            from: EMAIL_FROM,
+            to: email,
+            subject: `🦊 Fox Uniformes - Pagamento via PIX` ,
+            html: htmlContent,
+        });
+        if (error) {
+            console.error('❌ Erro ao enviar email PIX:', error);
+            return false;
+        }
+        console.log(`✅ Email PIX enviado para ${email} (ID: ${data?.id})`);
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao enviar email PIX:', error);
+        return false;
+    }
 };
 
 export default {
@@ -651,4 +769,6 @@ export default {
     confirmarPagamentoManual,
     cancelarPagamento,
     atualizarStatusPedidos,
+    criarPagamentoPixMercadoPago,
+    confirmarPagamentoPorExternalId,
 };
