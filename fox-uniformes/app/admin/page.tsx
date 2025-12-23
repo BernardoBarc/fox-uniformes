@@ -443,11 +443,15 @@ export default function AdminDashboardPage() {
 
   const handleSalvarEdicaoProduto = async () => {
     if (!editProdutoId || !editProdutoData) return;
+    // Garante que categoria seja sempre o _id
+    const categoriaId = typeof editProdutoData.categoria === 'object' ? editProdutoData.categoria._id : editProdutoData.categoria;
+    const produtoCorrigido = { ...editProdutoData, categoria: categoriaId };
+    console.log('Payload enviado ao backend:', produtoCorrigido); // debug
     try {
       const response = await fetch(`${API_URL}/produtos/${editProdutoId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editProdutoData),
+        body: JSON.stringify(produtoCorrigido),
       });
       if (response.ok) {
         setEditModalOpen(false);
@@ -1709,7 +1713,7 @@ export default function AdminDashboardPage() {
                     <input
                       type="text"
                       value={novoCliente.complemento}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, complemento: e.target.value })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNovoCliente({ ...novoCliente, complemento: e.target.value })}
                       className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
@@ -1863,12 +1867,19 @@ export default function AdminDashboardPage() {
               step={0.01}
             />
             <label className="block text-sm text-gray-400 mb-1">Categoria</label>
-            <input
-              type="text"
-              value={typeof editProdutoData.categoria === 'object' ? editProdutoData.categoria?.name : editProdutoData.categoria}
-              onChange={e => setEditProdutoData({ ...editProdutoData, categoria: e.target.value })}
+            <select
+              value={typeof editProdutoData.categoria === 'object' ? editProdutoData.categoria._id : editProdutoData.categoria}
+              onChange={e => {
+                const catObj = categorias.find(cat => cat._id === e.target.value);
+                setEditProdutoData({ ...editProdutoData, categoria: catObj ? catObj : e.target.value });
+              }}
               className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-4"
-            />
+            >
+              <option value="">Selecione...</option>
+              {categorias.map(cat => (
+                <option key={cat._id} value={cat._id}>{cat.name}</option>
+              ))}
+            </select>
             <div className="flex gap-4 justify-end">
               <button
                 onClick={() => setEditModalOpen(false)}

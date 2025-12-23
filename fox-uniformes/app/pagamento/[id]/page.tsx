@@ -9,9 +9,11 @@ interface Pedido {
   produtoId: {
     name: string;
     preco: number;
+    tamanho?: string;
   };
   quantidade: number;
   preco: number;
+  tamanho?: string;
 }
 
 interface Pagamento {
