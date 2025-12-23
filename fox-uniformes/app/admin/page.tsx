@@ -1712,7 +1712,8 @@ export default function AdminDashboardPage() {
                       onChange={(e) => setNovoCliente({ ...novoCliente, complemento: e.target.value })}
                       className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
-                  </div                </div>
+                  </div>
+                </div>
                 <button
                   type="submit"
                   disabled={loading}
