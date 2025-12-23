@@ -793,6 +793,13 @@ const enviarEmailPagamentoCartao = async (email, nomeCliente, valorTotal, cardDa
     }
 };
 
+// Cancelar pagamento
+const cancelarPagamento = async (pagamentoId) => {
+    return await pagamentoRepository.updatePagamento(pagamentoId, {
+        status: 'Cancelado',
+    });
+};
+
 export default {
     getAllPagamentos,
     getPagamentoById,
