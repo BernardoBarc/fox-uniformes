@@ -687,27 +687,32 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
         external_reference: pagamento._id.toString(),
         notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
     };
-    const result = await paymentInstance.create({ body });
-    const { id, status, point_of_interaction } = result.body;
-    const pixInfo = point_of_interaction?.transaction_data || {};
-    // Salva info PIX no pagamento
-    await pagamentoRepository.updatePagamento(pagamento._id, {
-        externalId: id,
-        status: 'Aguardando Pagamento',
-        pix: {
+    try {
+        const result = await paymentInstance.create({ body });
+        const { id, status, point_of_interaction } = result.body;
+        const pixInfo = point_of_interaction?.transaction_data || {};
+        // Salva info PIX no pagamento
+        await pagamentoRepository.updatePagamento(pagamento._id, {
+            externalId: id,
+            status: 'Aguardando Pagamento',
+            pix: {
+                qr_code: pixInfo.qr_code,
+                qr_code_base64: pixInfo.qr_code_base64,
+                copia_cola: pixInfo.qr_code,
+            },
+            gatewayResponse: result.body
+        });
+        return {
             qr_code: pixInfo.qr_code,
             qr_code_base64: pixInfo.qr_code_base64,
             copia_cola: pixInfo.qr_code,
-        },
-        gatewayResponse: result.body
-    });
-    return {
-        qr_code: pixInfo.qr_code,
-        qr_code_base64: pixInfo.qr_code_base64,
-        copia_cola: pixInfo.qr_code,
-        payment_id: id,
-        status,
-    };
+            payment_id: id,
+            status,
+        };
+    } catch (err) {
+        console.error('Erro Mercado Pago PIX:', err?.message, err?.response?.data || err);
+        throw new Error('Erro ao criar cobrança PIX: ' + (err?.message || 'Erro desconhecido'));
+    }
 };
 
 // Novo: criar pagamento com cartão de crédito Mercado Pago

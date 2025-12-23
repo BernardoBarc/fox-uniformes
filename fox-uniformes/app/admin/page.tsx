@@ -162,6 +162,10 @@ export default function AdminDashboardPage() {
 
   const [erroValidacaoCPF, setErroValidacaoCPF] = useState<string | null>(null);
 
+  const [editProdutoId, setEditProdutoId] = useState<string | null>(null);
+  const [editProdutoData, setEditProdutoData] = useState<Produto | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
   const getToken = () => localStorage.getItem("token");
 
   const getAuthHeaders = () => ({
@@ -427,6 +431,34 @@ export default function AdminDashboardPage() {
       setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Função para editar produto
+  const handleAbrirEditarProduto = (produto: Produto) => {
+    setEditProdutoId(produto._id);
+    setEditProdutoData({ ...produto });
+    setEditModalOpen(true);
+  };
+
+  const handleSalvarEdicaoProduto = async () => {
+    if (!editProdutoId || !editProdutoData) return;
+    try {
+      const response = await fetch(`${API_URL}/produtos/${editProdutoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editProdutoData),
+      });
+      if (response.ok) {
+        setEditModalOpen(false);
+        setEditProdutoId(null);
+        setEditProdutoData(null);
+        fetchProdutos();
+      } else {
+        alert("Erro ao salvar edição do produto.");
+      }
+    } catch (err) {
+      alert("Erro ao conectar com o servidor.");
     }
   };
 
@@ -1217,6 +1249,12 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-3">R$ {produto.preco?.toFixed(2)}</td>
                         <td className="px-4 py-3">
                           <button
+                            onClick={() => handleAbrirEditarProduto(produto)}
+                            className="text-blue-500 hover:text-blue-400 mr-2"
+                          >
+                            ✏️ Editar
+                          </button>
+                          <button
                             onClick={() => handleDeletarProduto(produto._id)}
                             className="text-red-500 hover:text-red-400"
                           >
@@ -1674,8 +1712,7 @@ export default function AdminDashboardPage() {
                       onChange={(e) => setNovoCliente({ ...novoCliente, complemento: e.target.value })}
                       className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
-                  </div>
-                </div>
+                  </div                </div>
                 <button
                   type="submit"
                   disabled={loading}
@@ -1795,6 +1832,55 @@ export default function AdminDashboardPage() {
           )}
         </main>
       </div>
+
+      {/* Modal de edição de produto */}
+      {editModalOpen && editProdutoData && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-8 rounded-xl w-full max-w-md">
+            <h2 className="text-2xl font-bold mb-4">Editar Produto</h2>
+            <label className="block text-sm text-gray-400 mb-1">Nome</label>
+            <input
+              type="text"
+              value={editProdutoData.name}
+              onChange={e => setEditProdutoData({ ...editProdutoData, name: e.target.value })}
+              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-2"
+            />
+            <label className="block text-sm text-gray-400 mb-1">Descrição</label>
+            <textarea
+              value={editProdutoData.descricao}
+              onChange={e => setEditProdutoData({ ...editProdutoData, descricao: e.target.value })}
+              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-2"
+              rows={2}
+            />
+            <label className="block text-sm text-gray-400 mb-1">Preço</label>
+            <input
+              type="number"
+              value={editProdutoData.preco}
+              onChange={e => setEditProdutoData({ ...editProdutoData, preco: Number(e.target.value) })}
+              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-2"
+              min={0}
+              step={0.01}
+            />
+            <label className="block text-sm text-gray-400 mb-1">Categoria</label>
+            <input
+              type="text"
+              value={typeof editProdutoData.categoria === 'object' ? editProdutoData.categoria?.name : editProdutoData.categoria}
+              onChange={e => setEditProdutoData({ ...editProdutoData, categoria: e.target.value })}
+              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-4"
+            />
+            <div className="flex gap-4 justify-end">
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-500"
+              >Cancelar</button>
+              <button
+                onClick={handleSalvarEdicaoProduto}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500"
+              >Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
