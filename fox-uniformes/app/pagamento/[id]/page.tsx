@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { API_URL } from "../../config/api";
 
@@ -31,6 +31,15 @@ interface Pagamento {
   createdAt: string;
 }
 
+// Adicionar tipagem global para MercadoPago
+// @ts-ignore
+// eslint-disable-next-line
+declare global {
+  interface Window {
+    MercadoPago?: any;
+  }
+}
+
 export default function PagamentoPage() {
   const params = useParams();
   const pagamentoId = params.id as string;
@@ -43,6 +52,18 @@ export default function PagamentoPage() {
   const [processando, setProcessando] = useState(false);
   const [pixData, setPixData] = useState<null | { qr_code: string; qr_code_base64: string; copia_cola: string }>(null);
   const [aguardandoPix, setAguardandoPix] = useState(false);
+  const [cardForm, setCardForm] = useState({
+    cardNumber: "",
+    cardholderName: "",
+    cardExpiration: "",
+    cardCvv: "",
+    docType: "CPF",
+    docNumber: "",
+    email: "",
+  });
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [cardSuccess, setCardSuccess] = useState<string | null>(null);
+  const mpInstance = useRef<any>(null);
 
   useEffect(() => {
     const fetchPagamento = async () => {
@@ -66,6 +87,21 @@ export default function PagamentoPage() {
     }
   }, [pagamentoId]);
 
+  // Carregar SDK Mercado Pago
+  useEffect(() => {
+    if (typeof window !== "undefined" && !window.MercadoPago) {
+      const script = document.createElement("script");
+      script.src = "https://sdk.mercadopago.com/js/v2";
+      script.async = true;
+      script.onload = () => {
+        mpInstance.current = new window.MercadoPago(process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY || "APP_USR-8613dbee-001e-4831-9be8-3ae81c744075");
+      };
+      document.body.appendChild(script);
+    } else if (window.MercadoPago) {
+      mpInstance.current = new window.MercadoPago(process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY || "APP_USR-8613dbee-001e-4831-9be8-3ae81c744075");
+    }
+  }, []);
+
   const calcularParcela = (valor: number, numParcelas: number) => {
     // Juros simples de 2.99% ao mês para cartão
     const juros = numParcelas > 1 ? 0.0299 : 0;
@@ -77,6 +113,8 @@ export default function PagamentoPage() {
     setProcessando(true);
     setAguardandoPix(false);
     setPixData(null);
+    setCardError(null);
+    setCardSuccess(null);
     try {
       if (metodoPagamento === 'pix') {
         if (!pagamento) return;
@@ -103,11 +141,69 @@ export default function PagamentoPage() {
         } else {
           alert('Erro ao gerar cobrança PIX.');
         }
+      } else if (metodoPagamento === 'cartao') {
+        if (!pagamento) return;
+        if (!mpInstance.current) {
+          setCardError("Erro ao carregar Mercado Pago. Tente novamente.");
+          setProcessando(false);
+          return;
+        }
+        // Validação básica
+        if (!cardForm.cardNumber || !cardForm.cardholderName || !cardForm.cardExpiration || !cardForm.cardCvv || !cardForm.docNumber || !cardForm.email) {
+          setCardError("Preencha todos os campos do cartão.");
+          setProcessando(false);
+          return;
+        }
+        // Gerar token do cartão
+        const [expMonth, expYear] = cardForm.cardExpiration.split("/").map(s => s.trim());
+        const cardTokenResult = await mpInstance.current.createCardToken({
+          cardNumber: cardForm.cardNumber.replace(/\s/g, ""),
+          cardholderName: cardForm.cardholderName,
+          cardExpirationMonth: expMonth,
+          cardExpirationYear: expYear,
+          securityCode: cardForm.cardCvv,
+          identificationType: cardForm.docType,
+          identificationNumber: cardForm.docNumber,
+        });
+        if (!cardTokenResult.id) {
+          setCardError("Erro ao gerar token do cartão. Verifique os dados.");
+          setProcessando(false);
+          return;
+        }
+        // Enviar para backend
+        const response = await fetch(`${API_URL}/pagamento/criar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clienteId: pagamento.clienteId,
+            pedidos: pagamento.pedidos.map(p => p._id),
+            valorTotal: pagamento.valorTotal,
+            telefone: pagamento.clienteId?.telefone,
+            nomeCliente: pagamento.clienteId?.nome,
+            metodoPagamento: 'CREDIT_CARD',
+            cardToken: cardTokenResult.id,
+            installments: parcelas,
+            payer: {
+              email: cardForm.email,
+              identification: {
+                type: cardForm.docType,
+                number: cardForm.docNumber,
+              },
+              first_name: pagamento.clienteId?.nome,
+              last_name: '',
+            },
+          }),
+        });
+        if (response.ok) {
+          setCardSuccess("Pagamento processado! Aguarde confirmação.");
+        } else {
+          setCardError("Erro ao processar pagamento com cartão.");
+        }
       } else {
-        alert('Pagamento com cartão ainda não implementado.');
+        alert('Selecione uma forma de pagamento.');
       }
     } catch (error) {
-      alert('Erro ao conectar com o servidor.');
+      setCardError('Erro ao conectar com o servidor.');
     } finally {
       setProcessando(false);
     }
@@ -264,7 +360,7 @@ export default function PagamentoPage() {
               </select>
               {parcelas > 1 && (
                 <p className="text-xs text-gray-500 mt-2">
-                  Total com juros: R$ {(calcularParcela(pagamento.valorTotal, parcelas) * parcelas).toFixed(2)}
+                  Total com juros: R$ {(calcularParcela(pagamento.valorTotal, Number(parcelas)) * Number(parcelas)).toFixed(2)}
                 </p>
               )}
             </div>
@@ -279,6 +375,68 @@ export default function PagamentoPage() {
             </div>
           )}
         </div>
+
+        {/* Formulário Cartão */}
+        {metodoPagamento === "cartao" && (
+          <div className="bg-gray-800 p-6 rounded-xl mb-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <span>💳</span> Dados do Cartão
+            </h2>
+
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Número do cartão"
+                className="w-full bg-gray-700 rounded-lg px-4 py-3 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                maxLength={19}
+                value={cardForm.cardNumber}
+                onChange={e => setCardForm(f => ({ ...f, cardNumber: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="Nome impresso no cartão"
+                className="w-full bg-gray-700 rounded-lg px-4 py-3 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={cardForm.cardholderName}
+                onChange={e => setCardForm(f => ({ ...f, cardholderName: e.target.value }))}
+              />
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  placeholder="MM/AA"
+                  className="w-1/2 bg-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  maxLength={5}
+                  value={cardForm.cardExpiration}
+                  onChange={e => setCardForm(f => ({ ...f, cardExpiration: e.target.value }))}
+                />
+                <input
+                  type="text"
+                  placeholder="CVV"
+                  className="w-1/2 bg-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  maxLength={4}
+                  value={cardForm.cardCvv}
+                  onChange={e => setCardForm(f => ({ ...f, cardCvv: e.target.value }))}
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="CPF do titular"
+                className="w-full bg-gray-700 rounded-lg px-4 py-3 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={cardForm.docNumber}
+                onChange={e => setCardForm(f => ({ ...f, docNumber: e.target.value }))}
+              />
+              <input
+                type="email"
+                placeholder="Email do titular"
+                className="w-full bg-gray-700 rounded-lg px-4 py-3 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={cardForm.email}
+                onChange={e => setCardForm(f => ({ ...f, email: e.target.value }))}
+              />
+            </div>
+
+            {cardError && <div className="text-red-400 text-sm mb-2">{cardError}</div>}
+            {cardSuccess && <div className="text-green-400 text-sm mb-2">{cardSuccess}</div>}
+          </div>
+        )}
 
         {/* Botão Pagar */}
         <button

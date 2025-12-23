@@ -56,7 +56,7 @@ const getPagamentosPendentes = async () => {
 
 // Criar pagamento e gerar link
 const criarPagamento = async (pagamentoData) => {
-    const { clienteId, pedidos, valorTotal, telefone, nomeCliente, metodoPagamento } = pagamentoData;
+    const { clienteId, pedidos, valorTotal, telefone, nomeCliente, metodoPagamento, cardToken, installments, payer } = pagamentoData;
     const cliente = await Cliente.findById(clienteId);
     const emailCliente = cliente?.email;
     // Salvar pagamento no banco
@@ -68,19 +68,20 @@ const criarPagamento = async (pagamentoData) => {
     });
     let linkPagamento = '';
     let pixData = null;
+    let cardData = null;
     try {
         if (MERCADO_PAGO_ACCESS_TOKEN && metodoPagamento === 'PIX') {
             // Criação real de pagamento PIX
             pixData = await criarPagamentoPixMercadoPago(pagamento, nomeCliente, valorTotal);
             linkPagamento = null; // Não há link, só QR Code/chave
-        } else if (MERCADO_PAGO_ACCESS_TOKEN) {
-            // Aqui você pode implementar cartão futuramente
-            // Por enquanto, só PIX real
-            throw new Error('Pagamento com cartão ainda não implementado');
+        } else if (MERCADO_PAGO_ACCESS_TOKEN && metodoPagamento === 'CREDIT_CARD') {
+            // Novo fluxo: pagamento com cartão de crédito Mercado Pago
+            cardData = await criarPagamentoCartaoMercadoPago(pagamento, nomeCliente, valorTotal, cardToken, installments, payer);
+            linkPagamento = null; // Não há link, é direto
         } else {
             linkPagamento = `${FRONTEND_URL}/pagamento/${pagamento._id}`;
         }
-        // Atualizar pagamento com o link (se não for PIX)
+        // Atualizar pagamento com o link (se não for PIX/cartão)
         if (linkPagamento) {
             await pagamentoRepository.updatePagamento(pagamento._id, { linkPagamento });
         }
@@ -88,6 +89,8 @@ const criarPagamento = async (pagamentoData) => {
         if (emailCliente) {
             if (pixData) {
                 await enviarEmailPagamentoPIX(emailCliente, nomeCliente, valorTotal, pixData);
+            } else if (cardData) {
+                await enviarEmailPagamentoCartao(emailCliente, nomeCliente, valorTotal, cardData);
             } else {
                 await enviarEmailPagamento(emailCliente, nomeCliente, valorTotal, linkPagamento);
             }
@@ -105,7 +108,7 @@ const criarPagamento = async (pagamentoData) => {
     } catch (error) {
         console.error('Erro ao gerar pagamento:', error);
     }
-    return { pagamento, linkPagamento, pixData };
+    return { pagamento, linkPagamento, pixData, cardData };
 };
 
 // Criar preferência no Mercado Pago
@@ -707,33 +710,65 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
     };
 };
 
-// Cancelar pagamento
-const cancelarPagamento = async (pagamentoId) => {
-    return await pagamentoRepository.updatePagamento(pagamentoId, {
-        status: 'Cancelado',
+// Novo: criar pagamento com cartão de crédito Mercado Pago
+const criarPagamentoCartaoMercadoPago = async (pagamento, nomeCliente, valorTotal, cardToken, installments = 1, payer = {}) => {
+    // payer: { email, identification: { type, number }, first_name, last_name }
+    if (!cardToken || !payer?.email) {
+        throw new Error('Dados do cartão ou pagador incompletos');
+    }
+    const body = {
+        transaction_amount: valorTotal,
+        token: cardToken,
+        description: `Pedido Fox Uniformes - ${nomeCliente}`,
+        installments: installments || 1,
+        payment_method_id: 'credit_card',
+        payer: {
+            email: payer.email,
+            identification: payer.identification,
+            first_name: payer.first_name || nomeCliente,
+            last_name: payer.last_name || '',
+        },
+        external_reference: pagamento._id.toString(),
+        notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
+    };
+    const result = await paymentInstance.create({ body });
+    const { id, status, status_detail } = result.body;
+    // Salva info cartão no pagamento
+    await pagamentoRepository.updatePagamento(pagamento._id, {
+        externalId: id,
+        status: status === 'approved' ? 'Aprovado' : 'Aguardando Pagamento',
+        metodoPagamento: 'Cartão de Crédito',
+        parcelas: installments || 1,
+        gatewayResponse: result.body
     });
+    // Se aprovado, atualizar status dos pedidos
+    if (status === 'approved') {
+        await atualizarStatusPedidos(pagamento.pedidos, 'Em Progresso');
+    }
+    return {
+        payment_id: id,
+        status,
+        status_detail,
+    };
 };
 
-// Enviar email com instruções de pagamento PIX
-const enviarEmailPagamentoPIX = async (email, nomeCliente, valorTotal, pixData) => {
+// Novo: enviar email de confirmação de pagamento cartão
+const enviarEmailPagamentoCartao = async (email, nomeCliente, valorTotal, cardData) => {
     const resend = createResendClient();
     if (!resend) {
-        console.log('=== EMAIL PIX (DEBUG - SEM CONFIGURAÇÃO) ===');
+        console.log('=== EMAIL CARTÃO (DEBUG - SEM CONFIGURAÇÃO) ===');
         console.log(`Para: ${email}`);
         console.log(`Cliente: ${nomeCliente}`);
         console.log(`Valor: R$ ${valorTotal.toFixed(2)}`);
-        console.log(`PIX:`, pixData);
+        console.log(`Status: ${cardData.status}`);
         return true;
     }
     const htmlContent = `
     <html><body style="font-family: Arial, sans-serif;">
-    <h2>Pagamento via PIX</h2>
+    <h2>Pagamento com Cartão de Crédito</h2>
     <p>Olá <b>${nomeCliente}</b>!</p>
-    <p>Para pagar seu pedido, utilize o QR Code abaixo ou copie a chave PIX:</p>
-    <div style="text-align:center;">
-        <img src="data:image/png;base64,${pixData.qr_code_base64}" alt="QR Code PIX" style="width:220px;height:220px;"/>
-        <p><b>Chave copia e cola:</b><br><span style="font-size:16px;">${pixData.copia_cola}</span></p>
-    </div>
+    <p>Seu pagamento foi processado.</p>
+    <p>Status: <b>${cardData.status}</b></p>
     <p>Valor: <b>R$ ${valorTotal.toFixed(2)}</b></p>
     <p>Assim que o pagamento for confirmado, seu pedido será processado automaticamente.</p>
     <p>Obrigado!</p>
@@ -743,17 +778,17 @@ const enviarEmailPagamentoPIX = async (email, nomeCliente, valorTotal, pixData) 
         const { data, error } = await resend.emails.send({
             from: EMAIL_FROM,
             to: email,
-            subject: `🦊 Fox Uniformes - Pagamento via PIX` ,
+            subject: `🦊 Fox Uniformes - Pagamento com Cartão` ,
             html: htmlContent,
         });
         if (error) {
-            console.error('❌ Erro ao enviar email PIX:', error);
+            console.error('❌ Erro ao enviar email cartão:', error);
             return false;
         }
-        console.log(`✅ Email PIX enviado para ${email} (ID: ${data?.id})`);
+        console.log(`✅ Email cartão enviado para ${email} (ID: ${data?.id})`);
         return true;
     } catch (error) {
-        console.error('❌ Erro ao enviar email PIX:', error);
+        console.error('❌ Erro ao enviar email cartão:', error);
         return false;
     }
 };
