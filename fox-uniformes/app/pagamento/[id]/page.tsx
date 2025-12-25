@@ -120,17 +120,24 @@ export default function PagamentoPage() {
     try {
       if (metodoPagamento === 'pix') {
         if (!pagamento) return;
+        // Garante que todos os pedidos tenham o campo tamanho
+        const pedidosComTamanho = pagamento.pedidos.map(p => ({
+          ...p,
+          tamanho: p.tamanho || (p.produtoId && p.produtoId.tamanho) || ''
+        }));
+        const payload = {
+          clienteId: pagamento.clienteId,
+          pedidos: pedidosComTamanho.map(p => p._id),
+          valorTotal: pagamento.valorTotal,
+          telefone: pagamento.clienteId?.telefone,
+          nomeCliente: pagamento.clienteId?.nome,
+          metodoPagamento: 'PIX',
+        };
+        console.log('Payload enviado para pagamento PIX:', payload);
         const response = await fetch(`${API_URL}/pagamento/criar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clienteId: pagamento.clienteId,
-            pedidos: pagamento.pedidos.map(p => p._id),
-            valorTotal: pagamento.valorTotal,
-            telefone: pagamento.clienteId?.telefone,
-            nomeCliente: pagamento.clienteId?.nome,
-            metodoPagamento: 'PIX',
-          }),
+          body: JSON.stringify(payload),
         });
         if (response.ok) {
           const data = await response.json();
@@ -139,9 +146,18 @@ export default function PagamentoPage() {
             setAguardandoPix(true);
           } else {
             alert('Erro ao gerar cobrança PIX. Tente novamente.');
+            setError('Erro: resposta do backend não contém dados do PIX.');
           }
         } else {
-          alert('Erro ao gerar cobrança PIX.');
+          let msg = 'Erro ao gerar cobrança PIX.';
+          try {
+            const errData = await response.json();
+            if (errData && errData.error) msg += ' ' + errData.error;
+          } catch (e) {
+            // resposta não é JSON
+          }
+          alert(msg);
+          setError(msg);
         }
       } else if (metodoPagamento === 'cartao') {
         if (!pagamento) return;
