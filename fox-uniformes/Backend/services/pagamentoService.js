@@ -688,7 +688,16 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
         notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
     };
     try {
+        console.log('=== [DEBUG] Body enviado para Mercado Pago PIX ===');
+        console.log(JSON.stringify(body, null, 2));
         const result = await paymentInstance.create({ body });
+        if (!result || !result.body || !result.body.id) {
+            console.error('=== [ERRO Mercado Pago PIX] Resposta inesperada ===');
+            console.error(JSON.stringify(result, null, 2));
+            throw new Error('Resposta inesperada do Mercado Pago ao criar PIX.');
+        }
+        console.log('=== [DEBUG] Resposta Mercado Pago PIX ===');
+        console.log(JSON.stringify(result.body, null, 2));
         const { id, status, point_of_interaction } = result.body;
         const pixInfo = point_of_interaction?.transaction_data || {};
         // Salva info PIX no pagamento
@@ -710,8 +719,15 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
             status,
         };
     } catch (err) {
-        console.error('Erro Mercado Pago PIX:', err?.message, err?.response?.data || err);
-        throw new Error('Erro ao criar cobrança PIX: ' + (err?.message || 'Erro desconhecido'));
+        console.error('=== [ERRO Mercado Pago PIX] ===');
+        console.error('Mensagem:', err?.message);
+        if (err?.response?.data) {
+            console.error('Detalhe:', JSON.stringify(err.response.data, null, 2));
+            throw new Error('Erro Mercado Pago: ' + (err.response.data.message || JSON.stringify(err.response.data)));
+        } else {
+            console.error(err);
+            throw new Error('Erro ao criar cobrança PIX: ' + (err?.message || 'Erro desconhecido'));
+        }
     }
 };
 
