@@ -54,11 +54,15 @@ router.get('/pagamentos/cliente/:clienteId', async (req, res) => {
 // Criar novo pagamento e gerar link
 router.post('/pagamento/criar', async (req, res) => {
     try {
-        const { clienteId, pedidos, valorTotal, telefone, nomeCliente } = req.body;
+        const { clienteId, pedidos, valorTotal, telefone, nomeCliente, metodoPagamento, cardToken, installments, payer } = req.body;
 
         if (!clienteId || !valorTotal) {
             return res.status(400).json({ error: 'ClienteId e valorTotal são obrigatórios' });
         }
+
+        // Loga o payload recebido
+        console.log('=== [DEBUG] Payload recebido em /pagamento/criar ===');
+        console.log(JSON.stringify(req.body, null, 2));
 
         const resultado = await pagamentoService.criarPagamento({
             clienteId,
@@ -66,12 +70,29 @@ router.post('/pagamento/criar', async (req, res) => {
             valorTotal,
             telefone,
             nomeCliente,
+            metodoPagamento,
+            cardToken,
+            installments,
+            payer
         });
+
+        // Loga o resultado retornado pelo service
+        console.log('=== [DEBUG] Resultado do pagamentoService.criarPagamento ===');
+        console.log(JSON.stringify(resultado, null, 2));
+
+        // Se for PIX e não vier pixData, retorna erro detalhado
+        if (metodoPagamento === 'PIX' && !resultado.pixData) {
+            return res.status(500).json({ error: 'Falha ao gerar cobrança PIX. Nenhum dado de PIX retornado.' });
+        }
+        // Se for cartão e não vier cardData, retorna erro detalhado
+        if (metodoPagamento === 'CREDIT_CARD' && !resultado.cardData) {
+            return res.status(500).json({ error: 'Falha ao processar pagamento com cartão. Nenhum dado de cartão retornado.' });
+        }
 
         res.status(201).json(resultado);
     } catch (error) {
         console.error('Erro ao criar pagamento:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        res.status(500).json({ error: error.message || 'Erro interno do servidor' });
     }
 });
 
