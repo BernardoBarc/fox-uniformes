@@ -691,15 +691,20 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
         console.log('=== [DEBUG] Body enviado para Mercado Pago PIX ===');
         console.log(JSON.stringify(body, null, 2));
         const result = await paymentInstance.create({ body });
-        if (!result || !result.body || !result.body.id) {
+        if (!result || !result.body) {
             console.error('=== [ERRO Mercado Pago PIX] Resposta inesperada ===');
             console.error(JSON.stringify(result, null, 2));
             throw new Error('Resposta inesperada do Mercado Pago ao criar PIX.');
         }
-        console.log('=== [DEBUG] Resposta Mercado Pago PIX ===');
-        console.log(JSON.stringify(result.body, null, 2));
-        const { id, status, point_of_interaction } = result.body;
-        const pixInfo = point_of_interaction?.transaction_data || {};
+        // Se não vier point_of_interaction ou transaction_data, retorna erro detalhado para o usuário
+        const { id, status, point_of_interaction, status_detail } = result.body;
+        if (!point_of_interaction || !point_of_interaction.transaction_data) {
+            console.error('=== [ERRO Mercado Pago PIX] Dados de PIX ausentes na resposta ===');
+            console.error(JSON.stringify(result.body, null, 2));
+            let motivo = result.body.status_detail || result.body.status || 'Dados de PIX ausentes.';
+            throw new Error('Erro Mercado Pago: ' + motivo + '. Verifique se o valor não é muito baixo, se a conta está habilitada para PIX e se todos os dados estão corretos.');
+        }
+        const pixInfo = point_of_interaction.transaction_data;
         // Salva info PIX no pagamento
         await pagamentoRepository.updatePagamento(pagamento._id, {
             externalId: id,
