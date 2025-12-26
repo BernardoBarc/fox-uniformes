@@ -716,10 +716,11 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
   });
 
   return {
-    qrCode: pixData.qr_code,
-    qrCodeBase64: pixData.qr_code_base64,
-    ticketUrl: pixData.ticket_url,
-    paymentId: payment.id,
+    qr_code: pixData.qr_code,
+    qr_code_base64: pixData.qr_code_base64,
+    copia_cola: pixData.qr_code,
+    ticket_url: pixData.ticket_url,
+    payment_id: payment.id,
   };
 };
 
