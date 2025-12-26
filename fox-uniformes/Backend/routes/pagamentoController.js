@@ -64,17 +64,23 @@ router.post('/pagamento/criar', async (req, res) => {
         console.log('=== [DEBUG] Payload recebido em /pagamento/criar ===');
         console.log(JSON.stringify(req.body, null, 2));
 
-        const resultado = await pagamentoService.criarPagamento({
-            clienteId,
-            pedidos,
-            valorTotal,
-            telefone,
-            nomeCliente,
-            metodoPagamento,
-            cardToken,
-            installments,
-            payer
-        });
+        let resultado;
+        try {
+            resultado = await pagamentoService.criarPagamento({
+                clienteId,
+                pedidos,
+                valorTotal,
+                telefone,
+                nomeCliente,
+                metodoPagamento,
+                cardToken,
+                installments,
+                payer
+            });
+        } catch (serviceError) {
+            // Retorna erro detalhado do service para o frontend
+            return res.status(500).json({ error: serviceError.message || 'Erro ao processar pagamento' });
+        }
 
         // Loga o resultado retornado pelo service
         console.log('=== [DEBUG] Resultado do pagamentoService.criarPagamento ===');

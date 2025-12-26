@@ -107,6 +107,8 @@ const criarPagamento = async (pagamentoData) => {
         }
     } catch (error) {
         console.error('Erro ao gerar pagamento:', error);
+        // Retorne erro detalhado para o controller
+        throw new Error(error.message || 'Erro ao gerar pagamento');
     }
     return { pagamento, linkPagamento, pixData, cardData };
 };
@@ -242,7 +244,7 @@ const enviarEmailPagamento = async (email, nomeCliente, valorTotal, linkPagament
     <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
         <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
             <div style="background-color: #f97316; color: white; padding: 30px; text-align: center;">
-                <h1 style="margin: 0; font-size: 28px;">🦊 Fox Uniformes</h1>
+                <h1 style="margin: 0; font-size: 28px;"> <img src="logoPreto.png" alt="Fox Uniformes" style="max-width: 100%; height: auto;"></h1>
             </div>
             <div style="padding: 30px;">
                 <p style="font-size: 18px; color: #333; margin-bottom: 20px;">Olá <strong>${nomeCliente}</strong>! 👋</p>
@@ -675,70 +677,53 @@ const confirmarPagamentoPorExternalId = async (external_reference, paymentId) =>
 
 // Criação de pagamento PIX real Mercado Pago
 const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) => {
-    // Docs: https://www.mercadopago.com.br/developers/pt/docs/checkout-api/pix/introduction
-    const body = {
-        transaction_amount: valorTotal,
-        description: `Pedido Fox Uniformes - ${nomeCliente}`,
-        payment_method_id: 'pix',
-        payer: {
-            email: pagamento.clienteId?.email || 'comprador@foxuniformes.com',
-            first_name: nomeCliente,
-        },
-        external_reference: pagamento._id.toString(),
-        notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
-    };
-    try {
-        console.log('=== [DEBUG] Body enviado para Mercado Pago PIX ===');
-        console.log(JSON.stringify(body, null, 2));
-        const result = await paymentInstance.create({ body });
-        if (!result || !result.body) {
-            console.error('=== [ERRO Mercado Pago PIX] Resposta inesperada ===');
-            console.error(JSON.stringify(result, null, 2));
-            throw new Error('Resposta inesperada do Mercado Pago ao criar PIX.');
-        }
-        // Se não vier point_of_interaction ou transaction_data, retorna erro detalhado para o usuário
-        const { id, status, point_of_interaction, status_detail } = result.body;
-        if (!point_of_interaction || !point_of_interaction.transaction_data) {
-            console.error('=== [ERRO Mercado Pago PIX] Dados de PIX ausentes na resposta ===');
-            console.error(JSON.stringify(result.body, null, 2));
-            let motivo = result.body.status_detail || result.body.status || 'Dados de PIX ausentes.';
-            throw new Error('Erro Mercado Pago: ' + motivo + '. Verifique se o valor não é muito baixo, se a conta está habilitada para PIX e se todos os dados estão corretos.');
-        }
-        const pixInfo = point_of_interaction.transaction_data;
-        // Salva info PIX no pagamento
-        await pagamentoRepository.updatePagamento(pagamento._id, {
-            externalId: id,
-            status: 'Aguardando Pagamento',
-            pix: {
-                qr_code: pixInfo.qr_code,
-                qr_code_base64: pixInfo.qr_code_base64,
-                copia_cola: pixInfo.qr_code,
-            },
-            gatewayResponse: result.body
-        });
-        return {
-            qr_code: pixInfo.qr_code,
-            qr_code_base64: pixInfo.qr_code_base64,
-            copia_cola: pixInfo.qr_code,
-            payment_id: id,
-            status,
-        };
-    } catch (err) {
-        console.error('=== [ERRO Mercado Pago PIX] ===');
-        console.error('Mensagem:', err?.message);
-        if (err?.response?.data) {
-            console.error('Detalhe:', JSON.stringify(err.response.data, null, 2));
-            throw new Error('Erro Mercado Pago: ' + (err.response.data.message || JSON.stringify(err.response.data)));
-        } else {
-            console.error(err);
-            throw new Error('Erro ao criar cobrança PIX: ' + (err?.message || 'Erro desconhecido'));
-        }
-    }
+  const body = {
+    transaction_amount: Number(valorTotal),
+    description: `Pedido Fox Uniformes - ${nomeCliente}`,
+    payment_method_id: 'pix',
+    payer: {
+      first_name: nomeCliente,
+    },
+    external_reference: pagamento._id.toString(),
+    notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
+  };
+
+  const response = await paymentInstance.create({ body });
+  const payment = response.body || response;
+
+  // ✅ PIX nasce PENDING
+  if (
+    payment.status !== 'pending' ||
+    payment.status_detail !== 'pending_waiting_transfer'
+  ) {
+    throw new Error(
+      `PIX criado em estado inválido: ${payment.status} / ${payment.status_detail}`
+    );
+  }
+
+  const pixData = payment.point_of_interaction?.transaction_data;
+
+  if (!pixData?.qr_code || !pixData?.qr_code_base64) {
+    throw new Error('PIX criado, mas QR Code não retornado');
+  }
+
+  // salva IDs no banco
+  await pagamentoRepository.updatePagamento(pagamento._id, {
+    externalId: payment.id,
+    status: 'Pendente',
+    gatewayResponse: payment,
+  });
+
+  return {
+    qrCode: pixData.qr_code,
+    qrCodeBase64: pixData.qr_code_base64,
+    ticketUrl: pixData.ticket_url,
+    paymentId: payment.id,
+  };
 };
 
 // Novo: criar pagamento com cartão de crédito Mercado Pago
 const criarPagamentoCartaoMercadoPago = async (pagamento, nomeCliente, valorTotal, cardToken, installments = 1, payer = {}) => {
-    // payer: { email, identification: { type, number }, first_name, last_name }
     if (!cardToken || !payer?.email) {
         throw new Error('Dados do cartão ou pagador incompletos');
     }
@@ -757,25 +742,35 @@ const criarPagamentoCartaoMercadoPago = async (pagamento, nomeCliente, valorTota
         external_reference: pagamento._id.toString(),
         notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
     };
-    const result = await paymentInstance.create({ body });
-    const { id, status, status_detail } = result.body;
-    // Salva info cartão no pagamento
-    await pagamentoRepository.updatePagamento(pagamento._id, {
-        externalId: id,
-        status: status === 'approved' ? 'Aprovado' : 'Aguardando Pagamento',
-        metodoPagamento: 'Cartão de Crédito',
-        parcelas: installments || 1,
-        gatewayResponse: result.body
-    });
-    // Se aprovado, atualizar status dos pedidos
-    if (status === 'approved') {
-        await atualizarStatusPedidos(pagamento.pedidos, 'Em Progresso');
+    try {
+        const result = await paymentInstance.create({ body });
+        const { id, status, status_detail } = result.body;
+        await pagamentoRepository.updatePagamento(pagamento._id, {
+            externalId: id,
+            status: status === 'approved' ? 'Aprovado' : 'Aguardando Pagamento',
+            metodoPagamento: 'Cartão de Crédito',
+            parcelas: installments || 1,
+            gatewayResponse: result.body
+        });
+        if (status === 'approved') {
+            await atualizarStatusPedidos(pagamento.pedidos, 'Em Progresso');
+        }
+        return {
+            payment_id: id,
+            status,
+            status_detail,
+        };
+    } catch (err) {
+        console.error('=== [ERRO Mercado Pago CARTÃO] ===');
+        console.error('Mensagem:', err?.message);
+        if (err?.response?.data) {
+            console.error('Detalhe:', JSON.stringify(err.response.data, null, 2));
+            throw new Error('Erro Mercado Pago: ' + (err.response.data.message || JSON.stringify(err.response.data)));
+        } else {
+            console.error(err);
+            throw new Error('Erro ao criar pagamento com cartão: ' + (err?.message || 'Erro desconhecido'));
+        }
     }
-    return {
-        payment_id: id,
-        status,
-        status_detail,
-    };
 };
 
 // Novo: enviar email de confirmação de pagamento cartão
