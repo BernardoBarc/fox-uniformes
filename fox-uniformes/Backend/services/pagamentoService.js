@@ -683,6 +683,7 @@ const criarPagamentoPixMercadoPago = async (pagamento, nomeCliente, valorTotal) 
     payment_method_id: 'pix',
     payer: {
       first_name: nomeCliente,
+      email: pagamento.clienteId?.email || 'comprador@foxuniformes.com',
     },
     external_reference: pagamento._id.toString(),
     notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
