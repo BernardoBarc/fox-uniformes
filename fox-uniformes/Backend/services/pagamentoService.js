@@ -815,6 +815,48 @@ const enviarEmailPagamentoCartao = async (email, nomeCliente, valorTotal, cardDa
     }
 };
 
+// Enviar email de pagamento PIX
+const enviarEmailPagamentoPIX = async (email, nomeCliente, valorTotal, pixData) => {
+    const resend = createResendClient();
+    if (!resend) {
+        console.log('=== EMAIL PIX (DEBUG - SEM CONFIGURAÇÃO) ===');
+        console.log(`Para: ${email}`);
+        console.log(`Cliente: ${nomeCliente}`);
+        console.log(`Valor: R$ ${valorTotal.toFixed(2)}`);
+        console.log(`QR Code: ${pixData.qrCode}`);
+        return true;
+    }
+    const htmlContent = `
+        <html>
+        <body>
+            <h2>Pagamento via PIX</h2>
+            <p>Olá <b>${nomeCliente}</b>!</p>
+            <p>Seu pedido foi registrado. Para pagar, utilize o QR Code abaixo:</p>
+            <img src="data:image/png;base64,${pixData.qrCodeBase64}" alt="QR Code PIX" />
+            <p>Copia e cola: <b>${pixData.qrCode}</b></p>
+            <p>Valor: <b>R$ ${valorTotal.toFixed(2)}</b></p>
+        </body>
+        </html>
+    `;
+    try {
+        const { data, error } = await resend.emails.send({
+            from: EMAIL_FROM,
+            to: email,
+            subject: `🦊 Fox Uniformes - Pagamento PIX`,
+            html: htmlContent,
+        });
+        if (error) {
+            console.error('❌ Erro ao enviar email PIX:', error);
+            return false;
+        }
+        console.log(`✅ Email PIX enviado para ${email} (ID: ${data?.id})`);
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao enviar email PIX:', error);
+        return false;
+    }
+};
+
 // Cancelar pagamento
 const cancelarPagamento = async (pagamentoId) => {
     return await pagamentoRepository.updatePagamento(pagamentoId, {
