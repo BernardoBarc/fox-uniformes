@@ -146,15 +146,25 @@ router.post('/pagamento/:id/cancelar', async (req, res) => {
 // Webhook do Mercado Pago
 router.post('/webhook/mercadopago', express.json(), async (req, res) => {
     try {
+        console.log('=== [WEBHOOK MERCADO PAGO] Payload recebido ===');
+        console.log(JSON.stringify(req.body, null, 2));
         const { type, data } = req.body;
         if (type === 'payment' && data && data.id) {
             // Buscar detalhes do pagamento no Mercado Pago
             const mpPayment = await import('mercadopago').then(mp => mp.default.payment.findById(data.id));
             const payment = mpPayment.body;
-            if (payment.status === 'approved' && payment.payment_method_id === 'pix') {
+            console.log('=== [WEBHOOK MERCADO PAGO] Detalhes do pagamento ===');
+            console.log(JSON.stringify(payment, null, 2));
+            // Considera aprovado se status for 'approved' OU 'accredited' (algumas contas usam accredited)
+            if ((payment.status === 'approved' || payment.status === 'accredited') && payment.payment_method_id === 'pix') {
                 // Atualizar status do pagamento no banco
                 await pagamentoService.confirmarPagamentoPorExternalId(payment.external_reference, payment.id);
+                console.log('=== [WEBHOOK MERCADO PAGO] Pagamento PIX aprovado e atualizado ===');
+            } else {
+                console.log('=== [WEBHOOK MERCADO PAGO] Pagamento não aprovado ou não é PIX ===');
             }
+        } else {
+            console.log('=== [WEBHOOK MERCADO PAGO] Payload não é de pagamento ou falta data.id ===');
         }
         res.status(200).send('OK');
     } catch (error) {
