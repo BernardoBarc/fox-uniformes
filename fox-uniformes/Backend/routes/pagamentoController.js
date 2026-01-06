@@ -152,8 +152,20 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
         // Aceita tanto 'type' quanto 'action' para identificar o evento
         const eventType = type || action;
         if ((eventType === 'payment' || eventType === 'payment.updated') && data && data.id) {
-            // Buscar detalhes do pagamento no Mercado Pago
-            const mpPayment = await import('mercadopago').then(mp => mp.default.payment.findById(data.id));
+            // Importa Mercado Pago e cobre diferentes formatos de import
+            const mp = await import('mercadopago');
+            const paymentFindById = mp.default?.payment?.findById || mp.payment?.findById;
+            if (!paymentFindById) {
+                console.error('[WEBHOOK MERCADO PAGO] Método findById não encontrado em mercadopago.payment');
+                return res.status(500).send('Erro interno: método findById não encontrado');
+            }
+            let mpPayment;
+            try {
+                mpPayment = await paymentFindById(data.id);
+            } catch (err) {
+                console.error('[WEBHOOK MERCADO PAGO] Erro ao buscar pagamento:', err);
+                return res.status(500).send('Erro ao buscar pagamento no Mercado Pago');
+            }
             const payment = mpPayment.body;
             console.log('=== [WEBHOOK MERCADO PAGO] Detalhes do pagamento ===');
             console.log(JSON.stringify(payment, null, 2));
