@@ -146,9 +146,9 @@ router.post('/pagamento/:id/cancelar', async (req, res) => {
 // Webhook do Mercado Pago
 router.post('/webhook/mercadopago', express.json(), async (req, res) => {
     try {
-        // Importa e instancia Mercado Pago dinamicamente (compatível v2.x+ ESM)
-        const mp = await import('mercadopago');
-        const mercadoPagoClient = new mp.MercadoPago({
+        // Importa Mercado Pago dinamicamente (compatível ESM v2.x)
+        const { default: mercadopago } = await import('mercadopago');
+        mercadopago.configure({
             access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN
         });
 
@@ -158,13 +158,13 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
         // Aceita tanto 'type' quanto 'action' para identificar o evento
         const eventType = type || action;
         if ((eventType === 'payment' || eventType === 'payment.updated') && data && data.id) {
-            if (!mercadoPagoClient.payment || !mercadoPagoClient.payment.findById) {
-                console.error('[WEBHOOK MERCADO PAGO] Método findById não existe em MercadoPago.payment');
+            if (!mercadopago.payment || !mercadopago.payment.findById) {
+                console.error('[WEBHOOK MERCADO PAGO] Método findById não existe em mercadopago.payment');
                 return res.status(500).send('Erro interno: método findById não existe');
             }
             let mpPayment;
             try {
-                mpPayment = await mercadoPagoClient.payment.findById(data.id);
+                mpPayment = await mercadopago.payment.findById(data.id);
             } catch (err) {
                 console.error('[WEBHOOK MERCADO PAGO] Erro ao buscar pagamento:', err);
                 return res.status(500).send('Erro ao buscar pagamento no Mercado Pago');
