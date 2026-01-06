@@ -2,6 +2,11 @@ import express from 'express';
 import mercadopago from 'mercadopago';
 import pagamentoService from '../services/pagamentoService.js';
 
+// Inicializa a SDK do Mercado Pago com o access token do ambiente
+mercadopago.configure({
+    access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN
+});
+
 const router = express.Router();
 
 // Buscar todos os pagamentos
@@ -153,6 +158,10 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
         // Aceita tanto 'type' quanto 'action' para identificar o evento
         const eventType = type || action;
         if ((eventType === 'payment' || eventType === 'payment.updated') && data && data.id) {
+            if (!mercadopago.payment || !mercadopago.payment.findById) {
+                console.error('[WEBHOOK MERCADO PAGO] Método findById não existe em mercadopago.payment');
+                return res.status(500).send('Erro interno: método findById não existe');
+            }
             let mpPayment;
             try {
                 mpPayment = await mercadopago.payment.findById(data.id);
