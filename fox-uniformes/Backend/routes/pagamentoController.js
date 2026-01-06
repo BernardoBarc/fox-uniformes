@@ -148,8 +148,10 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
     try {
         console.log('=== [WEBHOOK MERCADO PAGO] Payload recebido ===');
         console.log(JSON.stringify(req.body, null, 2));
-        const { type, data } = req.body;
-        if (type === 'payment' && data && data.id) {
+        const { type, action, data } = req.body;
+        // Aceita tanto 'type' quanto 'action' para identificar o evento
+        const eventType = type || action;
+        if ((eventType === 'payment' || eventType === 'payment.updated') && data && data.id) {
             // Buscar detalhes do pagamento no Mercado Pago
             const mpPayment = await import('mercadopago').then(mp => mp.default.payment.findById(data.id));
             const payment = mpPayment.body;
@@ -164,7 +166,7 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
                 console.log('=== [WEBHOOK MERCADO PAGO] Pagamento não aprovado ou não é PIX ===');
             }
         } else {
-            console.log('=== [WEBHOOK MERCADO PAGO] Payload não é de pagamento ou falta data.id ===');
+            console.log('=== [WEBHOOK MERCADO PAGO] Evento não é de pagamento ou falta data.id ===');
         }
         res.status(200).send('OK');
     } catch (error) {
