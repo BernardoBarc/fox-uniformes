@@ -146,17 +146,11 @@ router.post('/pagamento/:id/cancelar', async (req, res) => {
 // Webhook do Mercado Pago
 router.post('/webhook/mercadopago', express.json(), async (req, res) => {
     try {
-        // Importa e configura Mercado Pago dinamicamente (compatível ESM e fallback)
+        // Importa e instancia Mercado Pago dinamicamente (compatível v2.x+ ESM)
         const mp = await import('mercadopago');
-        const sdk = mp.default || mp;
-        if (typeof sdk.configure === 'function') {
-            sdk.configure({
-                access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN
-            });
-        } else {
-            console.error('[WEBHOOK MERCADO PAGO] Função configure não encontrada na SDK Mercado Pago');
-            return res.status(500).send('Erro interno: configure não encontrada');
-        }
+        const mercadoPagoClient = new mp.MercadoPago({
+            access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN
+        });
 
         console.log('=== [WEBHOOK MERCADO PAGO] Payload recebido ===');
         console.log(JSON.stringify(req.body, null, 2));
@@ -164,13 +158,13 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
         // Aceita tanto 'type' quanto 'action' para identificar o evento
         const eventType = type || action;
         if ((eventType === 'payment' || eventType === 'payment.updated') && data && data.id) {
-            if (!sdk.payment || !sdk.payment.findById) {
-                console.error('[WEBHOOK MERCADO PAGO] Método findById não existe em sdk.payment');
+            if (!mercadoPagoClient.payment || !mercadoPagoClient.payment.findById) {
+                console.error('[WEBHOOK MERCADO PAGO] Método findById não existe em MercadoPago.payment');
                 return res.status(500).send('Erro interno: método findById não existe');
             }
             let mpPayment;
             try {
-                mpPayment = await sdk.payment.findById(data.id);
+                mpPayment = await mercadoPagoClient.payment.findById(data.id);
             } catch (err) {
                 console.error('[WEBHOOK MERCADO PAGO] Erro ao buscar pagamento:', err);
                 return res.status(500).send('Erro ao buscar pagamento no Mercado Pago');
