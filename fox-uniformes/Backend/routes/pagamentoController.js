@@ -1,11 +1,5 @@
 import express from 'express';
-import mercadopago from 'mercadopago';
 import pagamentoService from '../services/pagamentoService.js';
-
-// Inicializa a SDK do Mercado Pago com o access token do ambiente (compatível ESM)
-mercadopago.configure({
-    access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN
-});
 
 const router = express.Router();
 
@@ -152,6 +146,12 @@ router.post('/pagamento/:id/cancelar', async (req, res) => {
 // Webhook do Mercado Pago
 router.post('/webhook/mercadopago', express.json(), async (req, res) => {
     try {
+        // Importa e configura Mercado Pago dinamicamente (compatível ESM)
+        const mercadopago = (await import('mercadopago')).default;
+        mercadopago.configure({
+            access_token: process.env.MERCADO_PAGO_ACCESS_TOKEN
+        });
+
         console.log('=== [WEBHOOK MERCADO PAGO] Payload recebido ===');
         console.log(JSON.stringify(req.body, null, 2));
         const { type, action, data } = req.body;
