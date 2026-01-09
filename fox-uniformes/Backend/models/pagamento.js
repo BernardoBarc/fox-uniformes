@@ -16,12 +16,12 @@ const pagamentoSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pendente', 'Aprovado', 'Recusado', 'Cancelado', 'Reembolsado'],
+        enum: ['Pendente', 'Pago', 'Recusado', 'Cancelado', 'Reembolsado'],
         default: 'Pendente',
     },
     metodoPagamento: {
         type: String,
-        enum: ['PIX', 'Cartão de Crédito', 'Cartão de Débito', 'Boleto'],
+        enum: ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'BOLETO'],
     },
     parcelas: {
         type: Number,
@@ -31,10 +31,31 @@ const pagamentoSchema = new mongoose.Schema({
         type: String,
     },
     externalId: {
-        type: String, // ID do pagamento no gateway (Mercado Pago, Stripe, etc)
+        type: String,
+        unique: true,
+        index: true,
+    },
+    externalPaymentId: {
+        type: String,
+        index: true,
+    },
+    pix: {
+        qrCode: String,
+        qrCodeBase64: String,
+        copiaECola: String,
+        expiracao: Date,
+    },
+    cartao: {
+        ultimos4: String,
+        bandeira: String,
+        parcelas: Number,
     },
     gatewayResponse: {
-        type: mongoose.Schema.Types.Mixed, // Resposta completa do gateway
+        type: mongoose.Schema.Types.Mixed,
+    },
+    webhookProcessado: {
+        type: Boolean,
+        default: false,
     },
     whatsappEnviado: {
         type: Boolean,
@@ -43,22 +64,14 @@ const pagamentoSchema = new mongoose.Schema({
     whatsappEnviadoEm: {
         type: Date,
     },
-    pagamentoConfirmadoEm: {
+    pagoEm: {
         type: Date,
     },
     notaFiscal: {
-        numero: {
-            type: String,
-        },
-        caminho: {
-            type: String,
-        },
-        url: {
-            type: String,
-        },
-        geradaEm: {
-            type: Date,
-        },
+        numero: String,
+        caminho: String,
+        url: String,
+        geradaEm: Date,
         enviadaWhatsApp: {
             type: Boolean,
             default: false,
@@ -68,6 +81,4 @@ const pagamentoSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-const Pagamento = mongoose.model('Pagamento', pagamentoSchema);
-
-export default Pagamento;
+export default mongoose.model('Pagamento', pagamentoSchema);

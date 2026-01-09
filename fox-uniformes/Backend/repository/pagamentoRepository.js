@@ -1,32 +1,32 @@
 import Pagamento from '../models/pagamento.js';
 
 const getAllPagamentos = async () => {
-    return await Pagamento.find()
+    return Pagamento.find()
         .populate('clienteId')
         .populate('pedidos')
         .sort({ createdAt: -1 });
 };
 
 const getPagamentoById = async (id) => {
-    return await Pagamento.findById(id)
+    return Pagamento.findById(id)
         .populate('clienteId')
         .populate('pedidos');
 };
 
 const getPagamentoByExternalId = async (externalId) => {
-    return await Pagamento.findOne({ externalId })
+    return Pagamento.findOne({ externalId })
         .populate('clienteId')
         .populate('pedidos');
 };
 
 const getPagamentosByCliente = async (clienteId) => {
-    return await Pagamento.find({ clienteId })
+    return Pagamento.find({ clienteId })
         .populate('pedidos')
         .sort({ createdAt: -1 });
 };
 
 const getPagamentosPendentes = async () => {
-    return await Pagamento.find({ status: 'Pendente' })
+    return Pagamento.find({ status: 'Pendente' })
         .populate('clienteId')
         .populate('pedidos')
         .sort({ createdAt: -1 });
@@ -34,23 +34,46 @@ const getPagamentosPendentes = async () => {
 
 const savePagamento = async (pagamentoData) => {
     const pagamento = new Pagamento(pagamentoData);
-    return await pagamento.save();
+    return pagamento.save();
 };
 
-const updatePagamento = async (id, pagamentoData) => {
-    return await Pagamento.findByIdAndUpdate(id, pagamentoData, { new: true })
-        .populate('clienteId')
-        .populate('pedidos');
+const updatePagamento = async (id, fieldsToUpdate) => {
+    return Pagamento.findByIdAndUpdate(
+        id,
+        { $set: fieldsToUpdate },
+        { new: true }
+    )
+    .populate('clienteId')
+    .populate('pedidos');
 };
 
-const updatePagamentoByExternalId = async (externalId, pagamentoData) => {
-    return await Pagamento.findOneAndUpdate({ externalId }, pagamentoData, { new: true })
-        .populate('clienteId')
-        .populate('pedidos');
+const updatePagamentoByExternalId = async (externalId, fieldsToUpdate) => {
+    return Pagamento.findOneAndUpdate(
+        { externalId },
+        { $set: fieldsToUpdate },
+        { new: true }
+    )
+    .populate('clienteId')
+    .populate('pedidos');
+};
+
+const confirmarPagamento = async ({ id, externalPaymentId, metodoPagamento }) => {
+    return Pagamento.findByIdAndUpdate(
+        id,
+        {
+            status: 'Pago',
+            metodoPagamento,
+            externalPaymentId,
+            pagoEm: new Date()
+        },
+        { new: true }
+    )
+    .populate('clienteId')
+    .populate('pedidos');
 };
 
 const deletePagamento = async (id) => {
-    return await Pagamento.findByIdAndDelete(id);
+    return Pagamento.findByIdAndDelete(id);
 };
 
 export default {
@@ -62,5 +85,6 @@ export default {
     savePagamento,
     updatePagamento,
     updatePagamentoByExternalId,
+    confirmarPagamento,
     deletePagamento
 };
