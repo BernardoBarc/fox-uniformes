@@ -85,9 +85,20 @@ const criarPagamento = async (data) => {
         auto_return: 'approved'
       }
     });
-    // Log compacto e útil
     const status = preference?.api_response?.status || preference?.status;
-    const initPoint = preference.body?.init_point;
+    let initPoint = preference.body?.init_point;
+    // Se body vier undefined, tenta outros campos e loga o objeto inteiro
+    if (!preference.body) {
+      console.error('[ERRO] MercadoPago preference.body está undefined. Objeto retornado:', preference);
+      // Tenta acessar outros campos comuns
+      if (preference.response?.init_point) {
+        initPoint = preference.response.init_point;
+        console.log('[DEBUG] Link de pagamento encontrado em response:', initPoint);
+      } else if (preference.init_point) {
+        initPoint = preference.init_point;
+        console.log('[DEBUG] Link de pagamento encontrado diretamente:', initPoint);
+      }
+    }
     console.log(`[DEBUG] MercadoPago status: ${status}`);
     if (initPoint) {
       console.log('[DEBUG] Link de pagamento gerado:', initPoint);
