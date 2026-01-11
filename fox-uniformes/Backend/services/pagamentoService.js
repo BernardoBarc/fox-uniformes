@@ -85,10 +85,20 @@ const criarPagamento = async (data) => {
         auto_return: 'approved'
       }
     });
-    console.log('[DEBUG] Resposta completa da preference:', JSON.stringify(preference, null, 2));
-    checkoutUrl = preference.body?.init_point;
+    // Log compacto e útil
+    const status = preference?.api_response?.status || preference?.status;
+    const initPoint = preference.body?.init_point;
+    console.log(`[DEBUG] MercadoPago status: ${status}`);
+    if (initPoint) {
+      console.log('[DEBUG] Link de pagamento gerado:', initPoint);
+    } else {
+      console.error('[ERRO] Preference criada mas não retornou init_point. Resposta resumida:', {
+        status,
+        body: preference.body
+      });
+    }
+    checkoutUrl = initPoint;
     if (!checkoutUrl) throw new Error('Preference criada mas não retornou init_point. Veja o log acima.');
-    console.log('[DEBUG] Preference criada com sucesso:', checkoutUrl);
   } catch (err) {
     console.error('[ERRO] Falha ao criar preference Mercado Pago:', err?.message || err);
     throw new Error('Erro ao criar link de pagamento Mercado Pago.');
