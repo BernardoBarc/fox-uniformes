@@ -7,7 +7,7 @@ import {
   getUrlNotaFiscal
 } from './notaFiscalService.js';
 import emailService from './emailService.js';
-import { MercadoPagoConfig, Payment } from 'mercadopago';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 /* =====================================================
    CONFIG
@@ -20,7 +20,7 @@ const mpClient = new MercadoPagoConfig({
   accessToken: MERCADO_PAGO_ACCESS_TOKEN
 });
 
-const paymentApi = new Payment(mpClient);
+const preferenceApi = new Preference(mpClient);
 
 /* =====================================================
    CONSULTAS
@@ -34,7 +34,7 @@ const getPagamentosPendentes = () =>
   pagamentoRepository.getPagamentosPendentes();
 
 /* =====================================================
-   CRIAR PAGAMENTO
+   CRIAR PAGAMENTO (Checkout Preference)
 ===================================================== */
 
 const criarPagamento = async (data) => {
@@ -42,17 +42,12 @@ const criarPagamento = async (data) => {
     clienteId,
     pedidos,
     valorTotal,
-    nomeCliente,
-    metodoPagamento,
-    cardToken,
-    installments,
-    payer
+    nomeCliente
   } = data;
 
   const cliente = await Cliente.findById(clienteId);
   if (!cliente) throw new Error('Cliente não encontrado');
 
-  // 1️⃣ Cria pagamento local
   const pagamento = await pagamentoRepository.savePagamento({
     clienteId,
     pedidos,
@@ -61,145 +56,51 @@ const criarPagamento = async (data) => {
     processadoWebhook: false
   });
 
-  let pix = null;
-  let card = null;
+  // Busca os pedidos para montar os itens do checkout
+  const pedidosDb = await Pedido.find({ _id: { $in: pedidos } }).populate('produtoId');
+  const items = pedidosDb.map((p) => ({
+    title: p.produtoId?.name || 'Produto',
+    quantity: p.quantidade,
+    unit_price: Number(p.preco),
+    currency_id: 'BRL'
+  }));
 
-  // 2️⃣ PIX
-  if (metodoPagamento === 'PIX') {
-    pix = await criarPagamentoPix(
-      pagamento,
-      cliente,
-      nomeCliente,
-      valorTotal
-    );
-
-    // 📧 Envia e-mail com link + copia e cola
-    try {
-      await emailService.enviarLinkPagamento({
-        para: cliente.email,
-        nome: cliente.nome,
-        valorTotal,
-        linkPagamento: pix.ticketUrl,
-        pixCopiaECola: pix.copiaECola
-      });
-    } catch (err) {
-      console.error('Erro ao enviar e-mail de pagamento:', err);
+  // Cria a preference do Mercado Pago
+  const preference = await preferenceApi.create({
+    body: {
+      items,
+      payer: {
+        email: cliente.email,
+        name: nomeCliente
+      },
+      external_reference: pagamento._id.toString(),
+      notification_url: `${BACKEND_URL}/webhook/mercadopago`,
+      back_urls: {
+        success: `${BACKEND_URL}/pagamento/sucesso`,
+        failure: `${BACKEND_URL}/pagamento/erro`,
+        pending: `${BACKEND_URL}/pagamento/pendente`
+      },
+      auto_return: 'approved'
     }
-  }
+  });
 
-  // 3️⃣ CARTÃO
-  if (metodoPagamento === 'CREDIT_CARD') {
-    card = await criarPagamentoCartao(
-      pagamento,
-      nomeCliente,
+  const checkoutUrl = preference.body.init_point;
+
+  // Envia o e-mail com o link de pagamento
+  try {
+    await emailService.enviarLinkPagamento({
+      para: cliente.email,
+      nome: cliente.nome,
       valorTotal,
-      cardToken,
-      installments,
-      payer
-    );
+      linkPagamento: checkoutUrl
+    });
+  } catch (err) {
+    console.error('Erro ao enviar e-mail de pagamento:', err);
   }
 
   return {
     pagamento,
-    pix,
-    card
-  };
-};
-
-/* =====================================================
-   PIX
-===================================================== */
-
-const criarPagamentoPix = async (
-  pagamento,
-  cliente,
-  nomeCliente,
-  valorTotal
-) => {
-  const response = await paymentApi.create({
-    body: {
-      transaction_amount: Number(valorTotal),
-      description: `Pedido - ${nomeCliente}`,
-      payment_method_id: 'pix',
-      payer: {
-        email: cliente.email,
-        first_name: nomeCliente
-      },
-      external_reference: pagamento._id.toString(),
-      notification_url: `${BACKEND_URL}/webhook/mercadopago`
-    }
-  });
-
-  const payment = response.body || response;
-
-  const pixData =
-    payment.point_of_interaction?.transaction_data;
-
-  if (!pixData) {
-    throw new Error('Erro ao gerar dados PIX');
-  }
-
-  // Atualiza pagamento com dados do PIX
-  await pagamentoRepository.updatePagamento(pagamento._id, {
-    externalId: payment.id,
-    metodoPagamento: 'PIX',
-    linkPagamento: pixData.ticket_url,
-    gatewayResponse: payment
-  });
-
-  return {
-    qrCodeBase64: pixData.qr_code_base64,
-    copiaECola: pixData.qr_code,
-    ticketUrl: pixData.ticket_url
-  };
-};
-
-/* =====================================================
-   CARTÃO
-===================================================== */
-
-const criarPagamentoCartao = async (
-  pagamento,
-  nomeCliente,
-  valorTotal,
-  cardToken,
-  installments = 1,
-  payer
-) => {
-  const response = await paymentApi.create({
-    body: {
-      transaction_amount: Number(valorTotal),
-      token: cardToken,
-      description: `Pedido - ${nomeCliente}`,
-      installments,
-      payment_method_id: 'credit_card',
-      payer,
-      external_reference: pagamento._id.toString(),
-      notification_url: `${BACKEND_URL}/webhook/mercadopago`
-    }
-  });
-
-  const payment = response.body;
-
-  await pagamentoRepository.updatePagamento(pagamento._id, {
-    externalId: payment.id,
-    metodoPagamento: 'Cartão de Crédito',
-    parcelas: installments,
-    gatewayResponse: payment
-  });
-
-  // Cartão aprovado não espera webhook
-  if (payment.status === 'approved') {
-    await confirmarPagamentoPorExternalId(
-      pagamento._id.toString(),
-      payment.id,
-      'Cartão de Crédito'
-    );
-  }
-
-  return {
-    paymentId: payment.id,
-    status: payment.status
+    checkoutUrl
   };
 };
 
