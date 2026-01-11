@@ -290,7 +290,7 @@ const atualizarStatusPedidos = async (ids, status) => {
 };
 
 const cancelarPagamento = (id) =>
-  pagamentoRepository.updatePagamento(id, { status: 'Cancelado' };
+  pagamentoRepository.updatePagamento(id, { status: 'Cancelado' });
 
 /* =====================================================
    EXPORT
