@@ -52,6 +52,7 @@ const criarPagamento = async (data) => {
   const cliente = await Cliente.findById(clienteId);
   if (!cliente) throw new Error('Cliente não encontrado');
 
+  // 1️⃣ Cria pagamento local
   const pagamento = await pagamentoRepository.savePagamento({
     clienteId,
     pedidos,
@@ -63,6 +64,7 @@ const criarPagamento = async (data) => {
   let pix = null;
   let card = null;
 
+  // 2️⃣ PIX
   if (metodoPagamento === 'PIX') {
     pix = await criarPagamentoPix(
       pagamento,
@@ -85,6 +87,7 @@ const criarPagamento = async (data) => {
     }
   }
 
+  // 3️⃣ CARTÃO
   if (metodoPagamento === 'CREDIT_CARD') {
     card = await criarPagamentoCartao(
       pagamento,
