@@ -65,26 +65,32 @@ const criarPagamento = async (data) => {
     currency_id: 'BRL'
   }));
 
-  // Cria a preference do Mercado Pago
-  const preference = await preferenceApi.create({
-    body: {
-      items,
-      payer: {
-        email: cliente.email,
-        name: nomeCliente
-      },
-      external_reference: pagamento._id.toString(),
-      notification_url: `${BACKEND_URL}/webhook/mercadopago`,
-      back_urls: {
-        success: `${BACKEND_URL}/pagamento/sucesso`,
-        failure: `${BACKEND_URL}/pagamento/erro`,
-        pending: `${BACKEND_URL}/pagamento/pendente`
-      },
-      auto_return: 'approved'
-    }
-  });
-
-  const checkoutUrl = preference.body.init_point;
+  let checkoutUrl = null;
+  try {
+    // Cria a preference do Mercado Pago
+    const preference = await preferenceApi.create({
+      body: {
+        items,
+        payer: {
+          email: cliente.email,
+          name: nomeCliente
+        },
+        external_reference: pagamento._id.toString(),
+        notification_url: `${BACKEND_URL}/webhook/mercadopago`,
+        back_urls: {
+          success: `${BACKEND_URL}/pagamento/sucesso`,
+          failure: `${BACKEND_URL}/pagamento/erro`,
+          pending: `${BACKEND_URL}/pagamento/pendente`
+        },
+        auto_return: 'approved'
+      }
+    });
+    checkoutUrl = preference.body.init_point;
+    console.log('[DEBUG] Preference criada com sucesso:', checkoutUrl);
+  } catch (err) {
+    console.error('[ERRO] Falha ao criar preference Mercado Pago:', err?.message || err);
+    throw new Error('Erro ao criar link de pagamento Mercado Pago.');
+  }
 
   // Envia o e-mail com o link de pagamento
   try {
@@ -94,6 +100,7 @@ const criarPagamento = async (data) => {
       valorTotal,
       linkPagamento: checkoutUrl
     });
+    console.log('[DEBUG] E-mail de pagamento enviado para', cliente.email);
   } catch (err) {
     console.error('Erro ao enviar e-mail de pagamento:', err);
   }
