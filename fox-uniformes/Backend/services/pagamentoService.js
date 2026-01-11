@@ -76,7 +76,7 @@ const criarPagamento = async (data) => {
           name: nomeCliente
         },
         external_reference: pagamento._id.toString(),
-        notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
+        notification_url: `${BACKEND_URL}/webhook/mercadopago`,
         back_urls: {
           success: `${BACKEND_URL}/pagamento/sucesso`,
           failure: `${BACKEND_URL}/pagamento/erro`,
@@ -85,7 +85,9 @@ const criarPagamento = async (data) => {
         auto_return: 'approved'
       }
     });
-    checkoutUrl = preference.body.init_point;
+    console.log('[DEBUG] Resposta completa da preference:', JSON.stringify(preference, null, 2));
+    checkoutUrl = preference.body?.init_point;
+    if (!checkoutUrl) throw new Error('Preference criada mas não retornou init_point. Veja o log acima.');
     console.log('[DEBUG] Preference criada com sucesso:', checkoutUrl);
   } catch (err) {
     console.error('[ERRO] Falha ao criar preference Mercado Pago:', err?.message || err);

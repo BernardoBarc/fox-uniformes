@@ -113,112 +113,36 @@ export default function PagamentoPage() {
 
   const handlePagar = async () => {
     setProcessando(true);
-    setAguardandoPix(false);
-    setPixData(null);
     setCardError(null);
     setCardSuccess(null);
     try {
-      if (metodoPagamento === 'PIX') {
-        if (!pagamento) return;
-        // Garante que todos os pedidos tenham o campo tamanho
-        const pedidosComTamanho = pagamento.pedidos.map(p => ({
-          ...p,
-          tamanho: p.tamanho || (p.produtoId && p.produtoId.tamanho) || ''
-        }));
-        const payload = {
-          clienteId: pagamento.clienteId,
-          pedidos: pedidosComTamanho.map(p => p._id),
-          valorTotal: pagamento.valorTotal,
-          telefone: pagamento.clienteId?.telefone,
-          nomeCliente: pagamento.clienteId?.nome,
-          metodoPagamento: 'PIX',
-        };
-        console.log('Payload enviado para pagamento PIX:', payload);
-        const response = await fetch(`${API_URL}/pagamento/criar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.pixData) {
-            setPixData(data.pixData);
-            setAguardandoPix(true);
-          } else {
-            alert('Erro ao gerar cobrança PIX. Tente novamente.');
-            setError('Erro: resposta do backend não contém dados do PIX.');
-          }
-        } else {
-          let msg = 'Erro ao gerar cobrança PIX.';
-          try {
-            const errData = await response.json();
-            if (errData && errData.error) msg += ' ' + errData.error;
-          } catch (e) {
-            // resposta não é JSON
-          }
-          alert(msg);
-          setError(msg);
-        }
-      } else if (metodoPagamento === 'CREDIT_CARD') {
-        if (!pagamento) return;
-        if (!mpInstance.current) {
-          setCardError("Erro ao carregar Mercado Pago. Tente novamente.");
-          setProcessando(false);
-          return;
-        }
-        // Validação básica
-        if (!cardForm.cardNumber || !cardForm.cardholderName || !cardForm.cardExpiration || !cardForm.cardCvv || !cardForm.docNumber || !cardForm.email) {
-          setCardError("Preencha todos os campos do cartão.");
-          setProcessando(false);
-          return;
-        }
-        // Gerar token do cartão
-        const [expMonth, expYear] = cardForm.cardExpiration.split("/").map(s => s.trim());
-        const cardTokenResult = await mpInstance.current.createCardToken({
-          cardNumber: cardForm.cardNumber.replace(/\s/g, ""),
-          cardholderName: cardForm.cardholderName,
-          cardExpirationMonth: expMonth,
-          cardExpirationYear: expYear,
-          securityCode: cardForm.cardCvv,
-          identificationType: cardForm.docType,
-          identificationNumber: cardForm.docNumber,
-        });
-        if (!cardTokenResult.id) {
-          setCardError("Erro ao gerar token do cartão. Verifique os dados.");
-          setProcessando(false);
-          return;
-        }
-        // Enviar para backend
-        const response = await fetch(`${API_URL}/pagamento/criar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clienteId: pagamento.clienteId,
-            pedidos: pagamento.pedidos.map(p => p._id),
-            valorTotal: pagamento.valorTotal,
-            telefone: pagamento.clienteId?.telefone,
-            nomeCliente: pagamento.clienteId?.nome,
-            metodoPagamento: 'CREDIT_CARD',
-            cardToken: cardTokenResult.id,
-            installments: parcelas,
-            payer: {
-              email: cardForm.email,
-              identification: {
-                type: cardForm.docType,
-                number: cardForm.docNumber,
-              },
-              first_name: pagamento.clienteId?.nome,
-              last_name: '',
-            },
-          }),
-        });
-        if (response.ok) {
-          setCardSuccess("Pagamento processado! Aguarde confirmação.");
-        } else {
-          setCardError("Erro ao processar pagamento com cartão.");
-        }
+      if (!pagamento) return;
+      // Garante que todos os pedidos tenham o campo tamanho
+      const pedidosComTamanho = pagamento.pedidos.map(p => ({
+        ...p,
+        tamanho: p.tamanho || (p.produtoId && p.produtoId.tamanho) || ''
+      }));
+      const payload = {
+        clienteId: pagamento.clienteId,
+        pedidos: pedidosComTamanho.map(p => p._id),
+        valorTotal: pagamento.valorTotal,
+        telefone: pagamento.clienteId?.telefone,
+        nomeCliente: pagamento.clienteId?.nome
+      };
+      const response = await fetch(`${API_URL}/pagamento/criar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        setCardSuccess('Venda realizada! O link de pagamento foi enviado para o e-mail do cliente.');
       } else {
-        alert('Selecione uma forma de pagamento.');
+        let msg = 'Erro ao gerar link de pagamento.';
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) msg += ' ' + errData.error;
+        } catch (e) {}
+        setCardError(msg);
       }
     } catch (error) {
       setCardError('Erro ao conectar com o servidor.');
@@ -263,19 +187,14 @@ export default function PagamentoPage() {
     );
   }
 
-  if (aguardandoPix && pixData) {
+  // Substituir toda a renderização de métodos de pagamento por uma mensagem de orientação
+  if (cardSuccess) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 p-8 rounded-xl text-center max-w-md">
-          <h1 className="text-2xl font-bold text-green-400 mb-4">Pagamento via PIX</h1>
-          <p className="mb-4 text-gray-300">Escaneie o QR Code abaixo ou copie a chave para pagar:</p>
-          <img src={`data:image/png;base64,${pixData.qr_code_base64}`} alt="QR Code PIX" className="mx-auto mb-4 w-56 h-56 rounded-lg border-4 border-green-500" />
-          <div className="bg-gray-700 rounded-lg p-3 mb-4">
-            <span className="block text-xs text-gray-400 mb-1">Chave copia e cola:</span>
-            <span className="text-green-300 break-all select-all text-sm">{pixData.copia_cola}</span>
-          </div>
-          <p className="text-gray-400 mb-2">Após o pagamento, a confirmação é automática!</p>
-          <p className="text-gray-500 text-xs">Se já pagou, aguarde alguns segundos e recarregue a página.</p>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="bg-gray-800 p-8 rounded-xl text-center">
+          <h1 className="text-2xl font-bold text-green-500 mb-4">Venda realizada!</h1>
+          <p className="text-gray-400 mb-4">O link de pagamento foi enviado para o e-mail do cliente.</p>
+          <p className="text-gray-500 text-sm">O cliente poderá escolher PIX, cartão ou boleto ao clicar no link.</p>
         </div>
       </div>
     );
