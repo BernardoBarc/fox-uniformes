@@ -76,7 +76,7 @@ const criarPagamento = async (data) => {
           name: nomeCliente
         },
         external_reference: pagamento._id.toString(),
-        notification_url: `${BACKEND_URL}/webhook/mercadopago`,
+        notification_url: `${BACKEND_URL}/api/webhook/mercadopago`,
         back_urls: {
           success: `${BACKEND_URL}/pagamento/sucesso`,
           failure: `${BACKEND_URL}/pagamento/erro`,
