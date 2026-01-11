@@ -6,7 +6,7 @@ import {
   gerarNumeroNota,
   getUrlNotaFiscal
 } from './notaFiscalService.js';
-
+import emailService from './emailService.js';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
 const MERCADO_PAGO_ACCESS_TOKEN = process.env.MERCADO_PAGO_ACCESS_TOKEN;
