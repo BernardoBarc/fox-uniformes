@@ -9,6 +9,10 @@ import {
 import emailService from './emailService.js';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
+/* =====================================================
+   CONFIG
+===================================================== */
+
 const MERCADO_PAGO_ACCESS_TOKEN = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
 
@@ -60,23 +64,30 @@ const criarPagamento = async (data) => {
   let pix = null;
   let card = null;
 
+  // 2️⃣ PIX
   if (metodoPagamento === 'PIX') {
-  pix = await criarPagamentoPix(pagamento, nomeCliente, valorTotal);
+    pix = await criarPagamentoPix(
+      pagamento,
+      cliente,
+      nomeCliente,
+      valorTotal
+    );
 
-  // 📧 Enviar e-mail com link + PIX
-  try {
-    await emailService.enviarLinkPagamento({
-      para: cliente.email,
-      nome: cliente.nome,
-      valorTotal,
-      linkPagamento: pix.ticketUrl,
-      pixCopiaECola: pix.copiaECola
-    });
-  } catch (err) {
-    console.error('Falha ao enviar e-mail de pagamento:', err);
+    // 📧 Envia e-mail com link + copia e cola
+    try {
+      await emailService.enviarLinkPagamento({
+        para: cliente.email,
+        nome: cliente.nome,
+        valorTotal,
+        linkPagamento: pix.ticketUrl,
+        pixCopiaECola: pix.copiaECola
+      });
+    } catch (err) {
+      console.error('Erro ao enviar e-mail de pagamento:', err);
+    }
   }
-}
 
+  // 3️⃣ CARTÃO
   if (metodoPagamento === 'CREDIT_CARD') {
     card = await criarPagamentoCartao(
       pagamento,
@@ -99,14 +110,19 @@ const criarPagamento = async (data) => {
    PIX
 ===================================================== */
 
-const criarPagamentoPix = async (pagamento, nomeCliente, valorTotal) => {
+const criarPagamentoPix = async (
+  pagamento,
+  cliente,
+  nomeCliente,
+  valorTotal
+) => {
   const response = await paymentApi.create({
     body: {
       transaction_amount: Number(valorTotal),
       description: `Pedido - ${nomeCliente}`,
       payment_method_id: 'pix',
       payer: {
-        email: 'comprador@exemplo.com',
+        email: cliente.email,
         first_name: nomeCliente
       },
       external_reference: pagamento._id.toString(),
@@ -123,7 +139,7 @@ const criarPagamentoPix = async (pagamento, nomeCliente, valorTotal) => {
     throw new Error('Erro ao gerar dados PIX');
   }
 
-  // 2️⃣ Atualiza pagamento com dados do PIX
+  // Atualiza pagamento com dados do PIX
   await pagamentoRepository.updatePagamento(pagamento._id, {
     externalId: payment.id,
     metodoPagamento: 'PIX',
@@ -131,7 +147,6 @@ const criarPagamentoPix = async (pagamento, nomeCliente, valorTotal) => {
     gatewayResponse: payment
   });
 
-  // 3️⃣ Retorno PADRONIZADO pro frontend
   return {
     qrCodeBase64: pixData.qr_code_base64,
     copiaECola: pixData.qr_code,
@@ -275,7 +290,7 @@ const atualizarStatusPedidos = async (ids, status) => {
 };
 
 const cancelarPagamento = (id) =>
-  pagamentoRepository.updatePagamento(id, { status: 'Cancelado' });
+  pagamentoRepository.updatePagamento(id, { status: 'Cancelado' };
 
 /* =====================================================
    EXPORT
