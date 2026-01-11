@@ -176,6 +176,33 @@ router.post('/pagamento/:id/cancelar', async (req, res) => {
 });
 
 // ============================
+// NOVOS ENDPOINTS: PIX e CARTÃO
+// ============================
+
+// Gerar dados PIX para o pagamento
+router.get('/pagamento/:id/pix', async (req, res) => {
+  try {
+    const pixData = await pagamentoService.gerarPixParaPagamento(req.params.id);
+    res.json(pixData);
+  } catch (error) {
+    console.error('Erro ao gerar dados PIX:', error);
+    res.status(500).json({ error: error.message || 'Erro ao gerar dados PIX' });
+  }
+});
+
+// Processar pagamento via cartão
+router.post('/pagamento/:id/cartao', async (req, res) => {
+  try {
+    const dadosCartao = req.body;
+    const resultado = await pagamentoService.processarPagamentoCartao(req.params.id, dadosCartao);
+    res.json(resultado);
+  } catch (error) {
+    console.error('Erro ao processar pagamento cartão:', error);
+    res.status(500).json({ error: error.message || 'Erro ao processar pagamento cartão' });
+  }
+});
+
+// ============================
 // WEBHOOK MERCADO PAGO (BLINDADO)
 // ============================
 

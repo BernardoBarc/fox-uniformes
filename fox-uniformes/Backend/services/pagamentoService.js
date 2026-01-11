@@ -7,7 +7,7 @@ import {
   getUrlNotaFiscal
 } from './notaFiscalService.js';
 import emailService from './emailService.js';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 
 /* =====================================================
    CONFIG
@@ -21,6 +21,7 @@ const mpClient = new MercadoPagoConfig({
 });
 
 const preferenceApi = new Preference(mpClient);
+const paymentApi = new Payment(mpClient);
 
 /* =====================================================
    CONSULTAS
@@ -65,9 +66,9 @@ const criarPagamento = async (data) => {
     currency_id: 'BRL'
   }));
 
-  let checkoutUrl = null;
+  // Cria a preference do Mercado Pago (mas não envia o link para o cliente)
+  let preferenceId = null;
   try {
-    // Cria a preference do Mercado Pago
     const preference = await preferenceApi.create({
       body: {
         items,
@@ -85,43 +86,24 @@ const criarPagamento = async (data) => {
         auto_return: 'approved'
       }
     });
-    const status = preference?.api_response?.status || preference?.status;
-    let initPoint = preference.body?.init_point;
-    // Se body vier undefined, tenta outros campos e loga o objeto inteiro
-    if (!preference.body) {
-      console.error('[ERRO] MercadoPago preference.body está undefined. Objeto retornado:', preference);
-      // Tenta acessar outros campos comuns
-      if (preference.response?.init_point) {
-        initPoint = preference.response.init_point;
-        console.log('[DEBUG] Link de pagamento encontrado em response:', initPoint);
-      } else if (preference.init_point) {
-        initPoint = preference.init_point;
-        console.log('[DEBUG] Link de pagamento encontrado diretamente:', initPoint);
-      }
-    }
-    console.log(`[DEBUG] MercadoPago status: ${status}`);
-    if (initPoint) {
-      console.log('[DEBUG] Link de pagamento gerado:', initPoint);
-    } else {
-      console.error('[ERRO] Preference criada mas não retornou init_point. Resposta resumida:', {
-        status,
-        body: preference.body
-      });
-    }
-    checkoutUrl = initPoint;
-    if (!checkoutUrl) throw new Error('Preference criada mas não retornou init_point. Veja o log acima.');
+    preferenceId = preference.body?.id || preference.response?.id || preference.id;
+    if (!preferenceId) throw new Error('Preference criada mas não retornou id.');
+    // Salva o id da preference no pagamento
+    await pagamentoRepository.updatePagamento(pagamento._id, { preferenceId });
+    console.log('[DEBUG] Preference Mercado Pago criada, id:', preferenceId);
   } catch (err) {
     console.error('[ERRO] Falha ao criar preference Mercado Pago:', err?.message || err);
-    throw new Error('Erro ao criar link de pagamento Mercado Pago.');
+    throw new Error('Erro ao criar preference Mercado Pago.');
   }
 
-  // Envia o e-mail com o link de pagamento
+  // Envia o e-mail com o link para a página de pagamento do sistema
   try {
+    const linkPagamento = `${process.env.FRONTEND_URL || 'https://fox-uniformes.vercel.app'}/pagamento/${pagamento._id}`;
     await emailService.enviarLinkPagamento({
       para: cliente.email,
       nome: cliente.nome,
       valorTotal,
-      linkPagamento: checkoutUrl
+      linkPagamento
     });
     console.log('[DEBUG] E-mail de pagamento enviado para', cliente.email);
   } catch (err) {
@@ -129,8 +111,7 @@ const criarPagamento = async (data) => {
   }
 
   return {
-    pagamento,
-    checkoutUrl
+    pagamento
   };
 };
 
@@ -223,6 +204,86 @@ const atualizarStatusPedidos = async (ids, status) => {
 const cancelarPagamento = (id) =>
   pagamentoRepository.updatePagamento(id, { status: 'Cancelado' });
 
+/**
+ * Gera dados PIX (QR Code e copia e cola) para o pagamento
+ */
+const gerarPixParaPagamento = async (pagamentoId) => {
+  const pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
+  if (!pagamento || !pagamento.preferenceId) throw new Error('Pagamento não encontrado ou preferenceId ausente');
+
+  // Busca a preference para pegar o valor e o payer
+  // (Se necessário, pode buscar do banco ou já ter salvo no pagamento)
+  // Aqui, vamos criar um pagamento PIX via API do Mercado Pago
+  const valor = pagamento.valorTotal;
+  const cliente = await Cliente.findById(pagamento.clienteId);
+  if (!cliente) throw new Error('Cliente não encontrado');
+
+  try {
+    const payment = await paymentApi.create({
+      body: {
+        transaction_amount: Number(valor),
+        payment_method_id: 'pix',
+        payer: {
+          email: cliente.email,
+          first_name: cliente.nome
+        },
+        description: `Pedido ${pagamentoId}`,
+        external_reference: pagamentoId
+      }
+    });
+    const pixData = payment.body?.point_of_interaction?.transaction_data;
+    if (!pixData) throw new Error('Não foi possível gerar dados PIX.');
+    // Salva o paymentId no pagamento para controle
+    await pagamentoRepository.updatePagamento(pagamentoId, { paymentId: payment.body.id });
+    return {
+      qrCode: pixData.qr_code,
+      qrCodeBase64: pixData.qr_code_base64,
+      copiaECola: pixData.qr_code,
+      paymentId: payment.body.id
+    };
+  } catch (err) {
+    console.error('[ERRO] Falha ao gerar pagamento PIX:', err?.message || err);
+    throw new Error('Erro ao gerar pagamento PIX.');
+  }
+};
+
+/**
+ * Processa pagamento via cartão de crédito
+ * @param {string} pagamentoId
+ * @param {object} dadosCartao { token, installments, payment_method_id, issuer_id }
+ */
+const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
+  const pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
+  if (!pagamento) throw new Error('Pagamento não encontrado');
+  const valor = pagamento.valorTotal;
+  const cliente = await Cliente.findById(pagamento.clienteId);
+  if (!cliente) throw new Error('Cliente não encontrado');
+
+  try {
+    const payment = await paymentApi.create({
+      body: {
+        transaction_amount: Number(valor),
+        token: dadosCartao.token,
+        installments: dadosCartao.installments,
+        payment_method_id: dadosCartao.payment_method_id,
+        issuer_id: dadosCartao.issuer_id,
+        payer: {
+          email: cliente.email,
+          first_name: cliente.nome
+        },
+        description: `Pedido ${pagamentoId}`,
+        external_reference: pagamentoId
+      }
+    });
+    // Salva o paymentId no pagamento
+    await pagamentoRepository.updatePagamento(pagamentoId, { paymentId: payment.body.id });
+    return payment.body;
+  } catch (err) {
+    console.error('[ERRO] Falha ao processar pagamento cartão:', err?.message || err);
+    throw new Error('Erro ao processar pagamento cartão.');
+  }
+};
+
 /* =====================================================
    EXPORT
 ===================================================== */
@@ -234,5 +295,7 @@ export default {
   getPagamentosPendentes,
   criarPagamento,
   confirmarPagamentoPorExternalId,
-  cancelarPagamento
+  cancelarPagamento,
+  gerarPixParaPagamento,
+  processarPagamentoCartao
 };
