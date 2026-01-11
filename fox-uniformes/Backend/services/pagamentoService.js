@@ -61,8 +61,21 @@ const criarPagamento = async (data) => {
   let card = null;
 
   if (metodoPagamento === 'PIX') {
-    pix = await criarPagamentoPix(pagamento, nomeCliente, valorTotal);
+  pix = await criarPagamentoPix(pagamento, nomeCliente, valorTotal);
+
+  // 📧 Enviar e-mail com link + PIX
+  try {
+    await emailService.enviarLinkPagamento({
+      para: cliente.email,
+      nome: cliente.nome,
+      valorTotal,
+      linkPagamento: pix.ticketUrl,
+      pixCopiaECola: pix.copiaECola
+    });
+  } catch (err) {
+    console.error('Falha ao enviar e-mail de pagamento:', err);
   }
+}
 
   if (metodoPagamento === 'CREDIT_CARD') {
     card = await criarPagamentoCartao(
