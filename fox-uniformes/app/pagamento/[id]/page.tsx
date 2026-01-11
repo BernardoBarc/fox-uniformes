@@ -117,32 +117,25 @@ export default function PagamentoPage() {
     setCardSuccess(null);
     try {
       if (!pagamento) return;
-      // Garante que todos os pedidos tenham o campo tamanho
-      const pedidosComTamanho = pagamento.pedidos.map(p => ({
-        ...p,
-        tamanho: p.tamanho || (p.produtoId && p.produtoId.tamanho) || ''
-      }));
-      const payload = {
-        clienteId: pagamento.clienteId,
-        pedidos: pedidosComTamanho.map(p => p._id),
-        valorTotal: pagamento.valorTotal,
-        telefone: pagamento.clienteId?.telefone,
-        nomeCliente: pagamento.clienteId?.nome
-      };
-      const response = await fetch(`${API_URL}/pagamento/criar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (response.ok) {
-        setCardSuccess('Venda realizada! O link de pagamento foi enviado para o e-mail do cliente.');
-      } else {
-        let msg = 'Erro ao gerar link de pagamento.';
-        try {
-          const errData = await response.json();
-          if (errData && errData.error) msg += ' ' + errData.error;
-        } catch (e) {}
-        setCardError(msg);
+      if (metodoPagamento === "PIX") {
+        // Chama o endpoint de PIX e exibe o QR Code/copia e cola
+        const response = await fetch(`${API_URL}/pagamento/${pagamento._id}/pix`);
+        if (response.ok) {
+          const data = await response.json();
+          setPixData({
+            qr_code: data.qrCode,
+            qr_code_base64: data.qrCodeBase64,
+            copia_cola: data.copiaECola
+          });
+          setAguardandoPix(true);
+        } else {
+          setCardError('Erro ao gerar QR Code PIX.');
+        }
+      } else if (metodoPagamento === "CREDIT_CARD") {
+        // Aqui você pode implementar o fluxo de cartão normalmente
+        // Exemplo: enviar os dados do cartão para o backend
+        // ...
+        setCardSuccess('Pagamento com cartão processado (exemplo).');
       }
     } catch (error) {
       setCardError('Erro ao conectar com o servidor.');
@@ -195,6 +188,34 @@ export default function PagamentoPage() {
           <h1 className="text-2xl font-bold text-green-500 mb-4">Venda realizada!</h1>
           <p className="text-gray-400 mb-4">O link de pagamento foi enviado para o e-mail do cliente.</p>
           <p className="text-gray-500 text-sm">O cliente poderá escolher PIX, cartão ou boleto ao clicar no link.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Exibir o QR Code PIX se disponível
+  if (pixData && aguardandoPix) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="bg-gray-800 p-8 rounded-xl text-center">
+          <h1 className="text-2xl font-bold text-green-500 mb-4">Pague com PIX</h1>
+          <img
+            src={`data:image/png;base64,${pixData.qr_code_base64}`}
+            alt="QR Code PIX"
+            className="mx-auto mb-4"
+            style={{ width: 200, height: 200 }}
+          />
+          <p className="text-gray-400 mb-2">Escaneie o QR Code acima ou copie o código abaixo:</p>
+          <div className="bg-gray-700 rounded p-2 mb-2 text-sm break-all select-all">
+            {pixData.copia_cola}
+          </div>
+          <p className="text-gray-500 text-xs">Após o pagamento, aguarde a confirmação automática nesta tela.</p>
+          <button
+            className="mt-4 px-4 py-2 bg-orange-600 rounded text-white font-bold"
+            onClick={() => { setPixData(null); setAguardandoPix(false); }}
+          >
+            Voltar
+          </button>
         </div>
       </div>
     );
