@@ -49,7 +49,7 @@ export default function PagamentoPage() {
   const [pagamento, setPagamento] = useState<Pagamento | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [metodoPagamento, setMetodoPagamento] = useState<"pix" | "cartao">("pix");
+  const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "CREDIT_CARD">("PIX");
   const [parcelas, setParcelas] = useState(1);
   const [processando, setProcessando] = useState(false);
   const [pixData, setPixData] = useState<null | { qr_code: string; qr_code_base64: string; copia_cola: string }>(null);
@@ -118,7 +118,7 @@ export default function PagamentoPage() {
     setCardError(null);
     setCardSuccess(null);
     try {
-      if (metodoPagamento === 'pix') {
+      if (metodoPagamento === 'PIX') {
         if (!pagamento) return;
         // Garante que todos os pedidos tenham o campo tamanho
         const pedidosComTamanho = pagamento.pedidos.map(p => ({
@@ -159,7 +159,7 @@ export default function PagamentoPage() {
           alert(msg);
           setError(msg);
         }
-      } else if (metodoPagamento === 'cartao') {
+      } else if (metodoPagamento === 'CREDIT_CARD') {
         if (!pagamento) return;
         if (!mpInstance.current) {
           setCardError("Erro ao carregar Mercado Pago. Tente novamente.");
@@ -330,9 +330,9 @@ export default function PagamentoPage() {
           <div className="grid grid-cols-2 gap-4 mb-6">
             {/* PIX */}
             <button
-              onClick={() => setMetodoPagamento("pix")}
+              onClick={() => setMetodoPagamento("PIX")}
               className={`p-4 rounded-lg border-2 transition ${
-                metodoPagamento === "pix"
+                metodoPagamento === "PIX"
                   ? "border-green-500 bg-green-500/10"
                   : "border-gray-600 hover:border-gray-500"
               }`}
@@ -344,9 +344,9 @@ export default function PagamentoPage() {
 
             {/* Cartão */}
             <button
-              onClick={() => setMetodoPagamento("cartao")}
+              onClick={() => setMetodoPagamento("CREDIT_CARD")}
               className={`p-4 rounded-lg border-2 transition ${
-                metodoPagamento === "cartao"
+                metodoPagamento === "CREDIT_CARD"
                   ? "border-blue-500 bg-blue-500/10"
                   : "border-gray-600 hover:border-gray-500"
               }`}
@@ -358,7 +358,7 @@ export default function PagamentoPage() {
           </div>
 
           {/* Opções de Parcelamento (apenas para cartão) */}
-          {metodoPagamento === "cartao" && (
+          {metodoPagamento === "CREDIT_CARD" && (
             <div className="mb-6">
               <label className="block text-sm text-gray-400 mb-2">Parcelas</label>
               <select
@@ -385,7 +385,7 @@ export default function PagamentoPage() {
           )}
 
           {/* Info PIX */}
-          {metodoPagamento === "pix" && (
+          {metodoPagamento === "PIX" && (
             <div className="bg-green-900/30 p-4 rounded-lg border border-green-500/30 mb-6">
               <p className="text-sm text-green-300">
                 ✅ Com PIX você paga à vista e a aprovação é instantânea!
@@ -395,7 +395,7 @@ export default function PagamentoPage() {
         </div>
 
         {/* Formulário Cartão */}
-        {metodoPagamento === "cartao" && (
+        {metodoPagamento === "CREDIT_CARD" && (
           <div className="bg-gray-800 p-6 rounded-xl mb-6">
             <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
               <span>💳</span> Dados do Cartão
@@ -461,7 +461,7 @@ export default function PagamentoPage() {
           onClick={handlePagar}
           disabled={processando}
           className={`w-full py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2 ${
-            metodoPagamento === "pix"
+            metodoPagamento === "PIX"
               ? "bg-green-600 hover:bg-green-700"
               : "bg-blue-600 hover:bg-blue-700"
           } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -473,7 +473,7 @@ export default function PagamentoPage() {
             </>
           ) : (
             <>
-              {metodoPagamento === "pix" ? "💚 Pagar com PIX" : "💳 Pagar com Cartão"}
+              {metodoPagamento === "PIX" ? "💚 Pagar com PIX" : "💳 Pagar com Cartão"}
             </>
           )}
         </button>
