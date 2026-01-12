@@ -1,21 +1,25 @@
 import pagamentoRepository from '../repository/pagamentoRepository.js';
 import Pedido from '../models/pedido.js';
 import Cliente from '../models/cliente.js';
+
 import {
   gerarNotaFiscal,
   gerarNumeroNota,
   getUrlNotaFiscal
 } from './notaFiscalService.js';
+
 import emailService from './emailService.js';
+
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 
 /* =====================================================
-   CONFIG
+   CONFIGURAÇÕES
 ===================================================== */
 
 const MERCADO_PAGO_ACCESS_TOKEN = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://fox-uniformes.vercel.app';
+const FRONTEND_URL =
+  process.env.FRONTEND_URL || 'https://fox-uniformes.vercel.app';
 
 const mpClient = new MercadoPagoConfig({
   accessToken: MERCADO_PAGO_ACCESS_TOKEN
@@ -28,18 +32,28 @@ const paymentApi = new Payment(mpClient);
    CONSULTAS
 ===================================================== */
 
-const getAllPagamentos = () => pagamentoRepository.getAllPagamentos();
-const getPagamentoById = (id) => pagamentoRepository.getPagamentoById(id);
+const getAllPagamentos = () =>
+  pagamentoRepository.getAllPagamentos();
+
+const getPagamentoById = (id) =>
+  pagamentoRepository.getPagamentoById(id);
+
 const getPagamentosByCliente = (clienteId) =>
   pagamentoRepository.getPagamentosByCliente(clienteId);
+
 const getPagamentosPendentes = () =>
   pagamentoRepository.getPagamentosPendentes();
 
 /* =====================================================
-   CRIAR PAGAMENTO (BASE)
+   CRIAÇÃO DO PAGAMENTO
 ===================================================== */
 
-const criarPagamento = async ({ clienteId, pedidos, valorTotal, nomeCliente }) => {
+const criarPagamento = async ({
+  clienteId,
+  pedidos,
+  valorTotal,
+  nomeCliente
+}) => {
   const cliente = await Cliente.findById(clienteId);
   if (!cliente) throw new Error('Cliente não encontrado');
 
@@ -51,8 +65,9 @@ const criarPagamento = async ({ clienteId, pedidos, valorTotal, nomeCliente }) =
     processadoWebhook: false
   });
 
-  // Cria preference apenas para checkout/cartão
-  const pedidosDb = await Pedido.find({ _id: { $in: pedidos } }).populate('produtoId');
+  const pedidosDb = await Pedido.find({
+    _id: { $in: pedidos }
+  }).populate('produtoId');
 
   const items = pedidosDb.map(p => ({
     title: p.produtoId?.name || 'Produto',
@@ -64,7 +79,10 @@ const criarPagamento = async ({ clienteId, pedidos, valorTotal, nomeCliente }) =
   const preference = await preferenceApi.create({
     body: {
       items,
-      payer: { email: cliente.email, name: nomeCliente },
+      payer: {
+        email: cliente.email,
+        name: nomeCliente
+      },
       external_reference: pagamento._id.toString(),
       notification_url: `${BACKEND_URL}/webhook/mercadopago`,
       back_urls: {
@@ -76,10 +94,11 @@ const criarPagamento = async ({ clienteId, pedidos, valorTotal, nomeCliente }) =
     }
   });
 
-  const preferenceId = preference.body?.id;
-  await pagamentoRepository.updatePagamento(pagamento._id, { preferenceId });
+  await pagamentoRepository.updatePagamento(pagamento._id, {
+    preferenceId: preference.body?.id
+  });
 
-  // Envia e-mail com link do sistema
+  // 📧 Envia link de pagamento
   await emailService.enviarLinkPagamento({
     para: cliente.email,
     nome: cliente.nome,
@@ -87,11 +106,11 @@ const criarPagamento = async ({ clienteId, pedidos, valorTotal, nomeCliente }) =
     linkPagamento: `${FRONTEND_URL}/pagamento/${pagamento._id}`
   });
 
-  return { pagamento };
+  return pagamento;
 };
 
 /* =====================================================
-   GERAR PIX (CORRIGIDO)
+   GERAR PIX
 ===================================================== */
 
 const gerarPixParaPagamento = async (pagamentoId) => {
@@ -115,17 +134,14 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     }
   });
 
-  // 🔥 CORREÇÃO CRÍTICA AQUI
   const payment =
-    response.body ||
-    response.response ||
-    response;
+    response.body || response.response || response;
 
   const pixData =
     payment.point_of_interaction?.transaction_data;
 
   if (!pixData) {
-    console.error('[ERRO] Resposta MP PIX:', JSON.stringify(payment, null, 2));
+    console.error('[PIX] Resposta inválida:', payment);
     throw new Error('Não foi possível gerar dados PIX');
   }
 
@@ -133,21 +149,19 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     metodoPagamento: 'PIX',
     externalId: payment.id,
     pix: {
-      qrCode: pixData.qr_code,
       copiaECola: pixData.qr_code,
       qrCodeBase64: pixData.qr_code_base64
     }
   });
 
   return {
-    qrCodeBase64: pixData.qr_code_base64,
     copiaECola: pixData.qr_code,
-    paymentId: payment.id
+    qrCodeBase64: pixData.qr_code_base64
   };
 };
 
 /* =====================================================
-   CARTÃO
+   CARTÃO DE CRÉDITO
 ===================================================== */
 
 const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
@@ -173,26 +187,26 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
     }
   });
 
-  const payment = response.body || response;
-
   await pagamentoRepository.updatePagamento(pagamentoId, {
     metodoPagamento: 'Cartão de Crédito',
-    externalId: payment.id
+    externalId: response.body?.id
   });
 
-  return payment;
+  return response.body;
 };
 
 /* =====================================================
-   CONFIRMAÇÃO (WEBHOOK)
+   WEBHOOK - CONFIRMAÇÃO DE PAGAMENTO
 ===================================================== */
 
 const confirmarPagamentoPorExternalId = async (
-  externalReference,
+  pagamentoId,
   paymentId,
   metodoPagamento
 ) => {
-  const pagamento = await pagamentoRepository.getPagamentoById(externalReference);
+  const pagamento =
+    await pagamentoRepository.getPagamentoById(pagamentoId);
+
   if (!pagamento || pagamento.processadoWebhook) return;
 
   const cliente = await Cliente.findById(pagamento.clienteId);
@@ -205,17 +219,35 @@ const confirmarPagamentoPorExternalId = async (
     processadoWebhook: true
   });
 
-  await atualizarStatusPedidos(pagamento.pedidos, 'Em Progresso');
-  await gerarNota(pagamento, cliente, metodoPagamento);
+  await atualizarStatusPedidos(pagamento.pedidos, 'Pendente');
+
+  // 🔥 GERA NOTA E ENVIA POR E-MAIL
+  const notaFiscal = await gerarNotaFiscalPagamento(
+    pagamento,
+    cliente,
+    metodoPagamento
+  );
+
+  await emailService.enviarNotaFiscal({
+    para: cliente.email,
+    nome: cliente.nome,
+    numeroNota: notaFiscal.numero,
+    caminhoPdf: notaFiscal.caminho
+  });
 };
 
 /* =====================================================
    NOTA FISCAL
 ===================================================== */
 
-const gerarNota = async (pagamento, cliente, metodoPagamento) => {
-  const pedidos = await Pedido.find({ _id: { $in: pagamento.pedidos } })
-    .populate('produtoId');
+const gerarNotaFiscalPagamento = async (
+  pagamento,
+  cliente,
+  metodoPagamento
+) => {
+  const pedidos = await Pedido.find({
+    _id: { $in: pagamento.pedidos }
+  }).populate('produtoId');
 
   const itens = pedidos.map(p => ({
     produtoNome: p.produtoId?.name || 'Produto',
@@ -225,7 +257,8 @@ const gerarNota = async (pagamento, cliente, metodoPagamento) => {
   }));
 
   const numeroNota = gerarNumeroNota();
-  const caminhoNota = await gerarNotaFiscal({
+
+  const caminho = await gerarNotaFiscal({
     numeroNota,
     cliente,
     itens,
@@ -235,18 +268,22 @@ const gerarNota = async (pagamento, cliente, metodoPagamento) => {
     dataEmissao: new Date()
   });
 
+  const notaFiscal = {
+    numero: numeroNota,
+    caminho,
+    url: `${BACKEND_URL}${getUrlNotaFiscal(caminho)}`,
+    geradaEm: new Date()
+  };
+
   await pagamentoRepository.updatePagamento(pagamento._id, {
-    notaFiscal: {
-      numero: numeroNota,
-      caminho: caminhoNota,
-      url: `${BACKEND_URL}${getUrlNotaFiscal(caminhoNota)}`,
-      geradaEm: new Date()
-    }
+    notaFiscal
   });
+
+  return notaFiscal;
 };
 
 /* =====================================================
-   AUX
+   AUXILIARES
 ===================================================== */
 
 const atualizarStatusPedidos = async (ids, status) => {
@@ -256,10 +293,12 @@ const atualizarStatusPedidos = async (ids, status) => {
 };
 
 const cancelarPagamento = (id) =>
-  pagamentoRepository.updatePagamento(id, { status: 'Cancelado' });
+  pagamentoRepository.updatePagamento(id, {
+    status: 'Cancelado'
+  });
 
 /* =====================================================
-   EXPORT
+   EXPORTAÇÃO
 ===================================================== */
 
 export default {

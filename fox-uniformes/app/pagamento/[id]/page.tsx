@@ -144,6 +144,26 @@ export default function PagamentoPage() {
     }
   };
 
+  // Polling para atualizar status do pagamento enquanto aguarda PIX
+  useEffect(() => {
+    if (aguardandoPix && pagamento?._id) {
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setPagamento(data);
+            if (data.status === "Aprovado") {
+              setPixData(null);
+              setAguardandoPix(false);
+            }
+          }
+        } catch {}
+      }, 4000); // a cada 4 segundos
+      return () => clearInterval(interval);
+    }
+  }, [aguardandoPix, pagamento?._id]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
