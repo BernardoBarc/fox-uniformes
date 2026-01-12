@@ -4,6 +4,7 @@ import Cliente from '../models/cliente.js';
 
 import {
   gerarNotaFiscal,
+  gerarNumeroNota,
   getUrlNotaFiscal
 } from './notaFiscalService.js';
 
