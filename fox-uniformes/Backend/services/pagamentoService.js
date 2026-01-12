@@ -4,7 +4,6 @@ import Cliente from '../models/cliente.js';
 
 import {
   gerarNotaFiscal,
-  gerarNumeroNota,
   getUrlNotaFiscal
 } from './notaFiscalService.js';
 
@@ -196,7 +195,7 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
 };
 
 /* =====================================================
-   WEBHOOK - CONFIRMAÇÃO DE PAGAMENTO
+   WEBHOOK - CONFIRMAÇÃO
 ===================================================== */
 
 const confirmarPagamentoPorExternalId = async (
@@ -221,13 +220,14 @@ const confirmarPagamentoPorExternalId = async (
 
   await atualizarStatusPedidos(pagamento.pedidos, 'Pendente');
 
-  // 🔥 GERA NOTA E ENVIA POR E-MAIL
+  // 🔥 GERA NOTA FISCAL
   const notaFiscal = await gerarNotaFiscalPagamento(
     pagamento,
     cliente,
     metodoPagamento
   );
 
+  // 📧 ENVIA NOTA POR E-MAIL
   await emailService.enviarNotaFiscal({
     para: cliente.email,
     nome: cliente.nome,
@@ -256,10 +256,11 @@ const gerarNotaFiscalPagamento = async (
     precoTotal: p.preco
   }));
 
-  const numeroNota = gerarNumeroNota();
-
-  const caminho = await gerarNotaFiscal({
+  // ⚠️ O número fiscal é gerado DENTRO do serviço
+  const {
     numeroNota,
+    caminho
+  } = await gerarNotaFiscal({
     cliente,
     itens,
     valorTotal: pagamento.valorTotal,

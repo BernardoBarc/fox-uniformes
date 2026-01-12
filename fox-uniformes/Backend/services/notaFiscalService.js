@@ -33,10 +33,6 @@ const gerarNumeroFiscalSequencial = async () => {
   return `NF-${anoAtual}-${sequencialFormatado}`;
 };
 
-export const gerarNumeroNota = async () => {
-  return await gerarNumeroFiscalSequencial();
-};
-
 /**
  * 📄 Gera a Nota Fiscal em PDF
  */
@@ -172,6 +168,5 @@ export const getUrlNotaFiscal = (caminhoCompleto) => {
 
 export default {
   gerarNotaFiscal,
-  gerarNumeroNota,
   getUrlNotaFiscal
 };
