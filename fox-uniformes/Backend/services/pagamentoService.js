@@ -208,12 +208,45 @@ const cancelarPagamento = (id) =>
  * Gera dados PIX (QR Code e copia e cola) para o pagamento
  */
 const gerarPixParaPagamento = async (pagamentoId) => {
-  const pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
-  if (!pagamento || !pagamento.preferenceId) throw new Error('Pagamento não encontrado ou preferenceId ausente');
+  let pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
+  if (!pagamento) throw new Error('Pagamento não encontrado');
 
-  // Busca a preference para pegar o valor e o payer
-  // (Se necessário, pode buscar do banco ou já ter salvo no pagamento)
-  // Aqui, vamos criar um pagamento PIX via API do Mercado Pago
+  // Fallback: se não houver preferenceId, cria uma preference agora
+  if (!pagamento.preferenceId) {
+    // Busca os pedidos para montar os itens do checkout
+    const pedidosDb = await Pedido.find({ _id: { $in: pagamento.pedidos } }).populate('produtoId');
+    const items = pedidosDb.map((p) => ({
+      title: p.produtoId?.name || 'Produto',
+      quantity: p.quantidade,
+      unit_price: Number(p.preco),
+      currency_id: 'BRL'
+    }));
+    const cliente = await Cliente.findById(pagamento.clienteId);
+    if (!cliente) throw new Error('Cliente não encontrado');
+    const preference = await preferenceApi.create({
+      body: {
+        items,
+        payer: {
+          email: cliente.email,
+          name: cliente.nome
+        },
+        external_reference: pagamento._id.toString(),
+        notification_url: `${BACKEND_URL}/webhook/mercadopago`,
+        back_urls: {
+          success: `${BACKEND_URL}/pagamento/sucesso`,
+          failure: `${BACKEND_URL}/pagamento/erro`,
+          pending: `${BACKEND_URL}/pagamento/pendente`
+        },
+        auto_return: 'approved'
+      }
+    });
+    const preferenceId = preference.body?.id || preference.response?.id || preference.id;
+    if (!preferenceId) throw new Error('Falha ao criar preference Mercado Pago.');
+    await pagamentoRepository.updatePagamento(pagamento._id, { preferenceId });
+    pagamento = await pagamentoRepository.getPagamentoById(pagamentoId); // Atualiza o objeto
+  }
+
+  // ...continua fluxo normal...
   const valor = pagamento.valorTotal;
   const cliente = await Cliente.findById(pagamento.clienteId);
   if (!cliente) throw new Error('Cliente não encontrado');
@@ -233,7 +266,6 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     });
     const pixData = payment.body?.point_of_interaction?.transaction_data;
     if (!pixData) throw new Error('Não foi possível gerar dados PIX.');
-    // Salva o paymentId no pagamento para controle
     await pagamentoRepository.updatePagamento(pagamentoId, { paymentId: payment.body.id });
     return {
       qrCode: pixData.qr_code,
