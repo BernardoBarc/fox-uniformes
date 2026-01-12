@@ -52,7 +52,7 @@ export default function PagamentoPage() {
   const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "CREDIT_CARD">("PIX");
   const [parcelas, setParcelas] = useState(1);
   const [processando, setProcessando] = useState(false);
-  const [pixData, setPixData] = useState<null | { qr_code: string; qr_code_base64: string; copia_cola: string }>(null);
+  const [pixData, setPixData] = useState<null | { qrCode: string; qrCodeBase64: string; copiaECola: string }>(null);
   const [aguardandoPix, setAguardandoPix] = useState(false);
   const [cardForm, setCardForm] = useState({
     cardNumber: "",
@@ -123,9 +123,9 @@ export default function PagamentoPage() {
         if (response.ok) {
           const data = await response.json();
           setPixData({
-            qr_code: data.qrCode,
-            qr_code_base64: data.qrCodeBase64,
-            copia_cola: data.copiaECola
+            qrCode: data.qrCode,
+            qrCodeBase64: data.qrCodeBase64,
+            copiaECola: data.copiaECola
           });
           setAguardandoPix(true);
         } else {
@@ -200,14 +200,14 @@ export default function PagamentoPage() {
         <div className="bg-gray-800 p-8 rounded-xl text-center">
           <h1 className="text-2xl font-bold text-green-500 mb-4">Pague com PIX</h1>
           <img
-            src={`data:image/png;base64,${pixData.qr_code_base64}`}
+            src={`data:image/png;base64,${pixData.qrCodeBase64}`}
             alt="QR Code PIX"
             className="mx-auto mb-4"
             style={{ width: 200, height: 200 }}
           />
           <p className="text-gray-400 mb-2">Escaneie o QR Code acima ou copie o código abaixo:</p>
           <div className="bg-gray-700 rounded p-2 mb-2 text-sm break-all select-all">
-            {pixData.copia_cola}
+            {pixData.copiaECola}
           </div>
           <p className="text-gray-500 text-xs">Após o pagamento, aguarde a confirmação automática nesta tela.</p>
           <button
