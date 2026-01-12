@@ -255,7 +255,7 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     const payment = await paymentApi.create({
       body: {
         transaction_amount: Number(valor),
-        payment_method_id: 'PIX',
+        payment_method_id: 'pix',
         payer: {
           email: cliente.email,
           first_name: cliente.nome
