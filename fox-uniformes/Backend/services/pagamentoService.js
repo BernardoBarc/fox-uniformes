@@ -28,6 +28,29 @@ const preferenceApi = new Preference(mpClient);
 const paymentApi = new Payment(mpClient);
 
 /* =====================================================
+   AUXILIAR - VALIDA CPF
+===================================================== */
+
+const validarCPF = (cpf) => {
+  cpf = cpf.replace(/[^\d]+/g, '');
+
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 9; i++) soma += parseInt(cpf[i]) * (10 - i);
+  let resto = (soma * 10) % 11;
+  if (resto === 10) resto = 0;
+  if (resto !== parseInt(cpf[9])) return false;
+
+  soma = 0;
+  for (let i = 0; i < 10; i++) soma += parseInt(cpf[i]) * (11 - i);
+  resto = (soma * 10) % 11;
+  if (resto === 10) resto = 0;
+
+  return resto === parseInt(cpf[10]);
+};
+
+/* =====================================================
    CONSULTAS
 ===================================================== */
 
@@ -97,7 +120,6 @@ const criarPagamento = async ({
     preferenceId: preference.body?.id
   });
 
-  // 📧 Envia link de pagamento
   await emailService.enviarLinkPagamento({
     para: cliente.email,
     nome: cliente.nome,
@@ -109,7 +131,7 @@ const criarPagamento = async ({
 };
 
 /* =====================================================
-   GERAR PIX
+   PIX (INALTERADO)
 ===================================================== */
 
 const gerarPixParaPagamento = async (pagamentoId) => {
@@ -140,7 +162,6 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     payment.point_of_interaction?.transaction_data;
 
   if (!pixData) {
-    console.error('[PIX] Resposta inválida:', payment);
     throw new Error('Não foi possível gerar dados PIX');
   }
 
@@ -160,7 +181,7 @@ const gerarPixParaPagamento = async (pagamentoId) => {
 };
 
 /* =====================================================
-   CARTÃO DE CRÉDITO
+   CARTÃO DE CRÉDITO (CORRIGIDO)
 ===================================================== */
 
 const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
@@ -170,32 +191,46 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
   const cliente = await Cliente.findById(pagamento.clienteId);
   if (!cliente) throw new Error('Cliente não encontrado');
 
-  const response = await paymentApi.create({
-    body: {
-      transaction_amount: Number(pagamento.valorTotal),
-      token: dadosCartao.token,
-      installments: dadosCartao.installments,
-      payment_method_id: dadosCartao.payment_method_id,
-      issuer_id: dadosCartao.issuer_id,
-      payer: {
-        email: cliente.email,
-        first_name: cliente.nome
-      },
-      external_reference: pagamentoId,
-      notification_url: `${BACKEND_URL}/webhook/mercadopago`
-    }
-  });
+  if (!validarCPF(dadosCartao.cpf)) {
+    throw new Error('CPF inválido');
+  }
 
-  await pagamentoRepository.updatePagamento(pagamentoId, {
-    metodoPagamento: 'Cartão de Crédito',
-    externalId: response.body?.id
-  });
+ const response = await paymentApi.create({
+  body: {
+    transaction_amount: Number(pagamento.valorTotal),
+    token: dadosCartao.token,
+    installments: dadosCartao.installments,
+    payer: {
+      email: cliente.email,
+      first_name: cliente.nome,
+      identification: {
+        type: 'CPF',
+        number: dadosCartao.cpf
+      }
+    },
+    external_reference: pagamentoId,
+    notification_url: `${BACKEND_URL}/webhook/mercadopago`
+  }
+});
 
-  return response.body;
+const payment = response.body;
+
+await pagamentoRepository.updatePagamento(pagamentoId, {
+  metodoPagamento: 'Cartão de Crédito',
+  externalId: payment.id,
+  parcelas: dadosCartao.installments,
+  status: 'Em processamento'
+});
+
+
+  return {
+    sucesso: true,
+    status: payment.status
+  };
 };
 
 /* =====================================================
-   WEBHOOK - CONFIRMAÇÃO
+   WEBHOOK
 ===================================================== */
 
 const confirmarPagamentoPorExternalId = async (
@@ -220,14 +255,12 @@ const confirmarPagamentoPorExternalId = async (
 
   await atualizarStatusPedidos(pagamento.pedidos, 'Pendente');
 
-  // 🔥 GERA NOTA FISCAL
   const notaFiscal = await gerarNotaFiscalPagamento(
     pagamento,
     cliente,
     metodoPagamento
   );
 
-  // 📧 ENVIA NOTA POR E-MAIL
   await emailService.enviarNotaFiscal({
     para: cliente.email,
     nome: cliente.nome,
@@ -256,7 +289,6 @@ const gerarNotaFiscalPagamento = async (
     precoTotal: p.preco
   }));
 
-  // ⚠️ O número fiscal é gerado DENTRO do serviço
   const {
     numeroNota,
     caminho

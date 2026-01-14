@@ -29,13 +29,9 @@ interface Pagamento {
   status: string;
   metodoPagamento?: string;
   parcelas?: number;
-  linkPagamento?: string;
   createdAt: string;
 }
 
-// Adicionar tipagem global para MercadoPago
-// @ts-ignore
-// eslint-disable-next-line
 declare global {
   interface Window {
     MercadoPago?: any;
@@ -45,197 +41,217 @@ declare global {
 export default function PagamentoPage() {
   const params = useParams();
   const pagamentoId = params.id as string;
-  
+
   const [pagamento, setPagamento] = useState<Pagamento | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "CREDIT_CARD">("PIX");
+
+  const [metodoPagamento, setMetodoPagamento] =
+    useState<"PIX" | "CREDIT_CARD">("PIX");
+
   const [parcelas, setParcelas] = useState(1);
   const [processando, setProcessando] = useState(false);
-  const [pixData, setPixData] = useState<null | { qrCode: string; qrCodeBase64: string; copiaECola: string }>(null);
-  const [aguardandoPix, setAguardandoPix] = useState(false);
+
+  const [pixData, setPixData] = useState<null | {
+    qrCodeBase64: string;
+    copiaECola: string;
+  }>(null);
+
+  const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
+
   const [cardForm, setCardForm] = useState({
     cardNumber: "",
     cardholderName: "",
     cardExpiration: "",
     cardCvv: "",
-    docType: "CPF",
     docNumber: "",
     email: "",
   });
+
   const [cardError, setCardError] = useState<string | null>(null);
-  const [cardSuccess, setCardSuccess] = useState<string | null>(null);
+
   const mpInstance = useRef<any>(null);
 
+  /* ================= BUSCAR PAGAMENTO ================= */
   useEffect(() => {
     const fetchPagamento = async () => {
       try {
         const response = await fetch(`${API_URL}/pagamentos/${pagamentoId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setPagamento(data);
-        } else {
-          setError("Pagamento não encontrado");
-        }
-      } catch (err) {
-        setError("Erro ao carregar dados do pagamento");
+        if (!response.ok) throw new Error();
+        setPagamento(await response.json());
+      } catch {
+        setError("Pagamento não encontrado");
       } finally {
         setLoading(false);
       }
     };
 
-    if (pagamentoId) {
-      fetchPagamento();
-    }
+    if (pagamentoId) fetchPagamento();
   }, [pagamentoId]);
 
-  // Carregar SDK Mercado Pago
+  /* ================= SDK MERCADO PAGO ================= */
   useEffect(() => {
-    if (typeof window !== "undefined" && !window.MercadoPago) {
+    if (typeof window === "undefined") return;
+
+    if (!window.MercadoPago) {
       const script = document.createElement("script");
       script.src = "https://sdk.mercadopago.com/js/v2";
-      script.async = true;
       script.onload = () => {
-        mpInstance.current = new window.MercadoPago(process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY || "APP_USR-8613dbee-001e-4831-9be8-3ae81c744075");
+        mpInstance.current = new window.MercadoPago(
+          process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY
+        );
       };
       document.body.appendChild(script);
-    } else if (window.MercadoPago) {
-      mpInstance.current = new window.MercadoPago(process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY || "APP_USR-8613dbee-001e-4831-9be8-3ae81c744075");
+    } else {
+      mpInstance.current = new window.MercadoPago(
+        process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY
+      );
     }
   }, []);
 
-  const calcularParcela = (valor: number, numParcelas: number) => {
-    // Juros simples de 2.99% ao mês para cartão
-    const juros = numParcelas > 1 ? 0.0299 : 0;
-    const valorComJuros = valor * (1 + juros * numParcelas);
-    return valorComJuros / numParcelas;
+  /* ================= PARCELAMENTO ================= */
+  const calcularParcela = (valor: number, num: number) => {
+    const juros = num > 1 ? 0.0299 : 0;
+    return (valor * (1 + juros * num)) / num;
   };
 
+  /* ================= PAGAR ================= */
   const handlePagar = async () => {
+    if (!pagamento) return;
+
     setProcessando(true);
     setCardError(null);
-    setCardSuccess(null);
+
     try {
-      if (!pagamento) return;
+      /* ---------- PIX ---------- */
       if (metodoPagamento === "PIX") {
-        // Chama o endpoint de PIX e exibe o QR Code/copia e cola
-        const response = await fetch(`${API_URL}/pagamento/${pagamento._id}/pix`);
-        if (response.ok) {
-          const data = await response.json();
-          setPixData({
-            qrCode: data.qrCode,
-            qrCodeBase64: data.qrCodeBase64,
-            copiaECola: data.copiaECola
-          });
-          setAguardandoPix(true);
-        } else {
-          setCardError('Erro ao gerar QR Code PIX.');
-        }
-      } else if (metodoPagamento === "CREDIT_CARD") {
-        // Aqui você pode implementar o fluxo de cartão normalmente
-        // Exemplo: enviar os dados do cartão para o backend
-        // ...
-        setCardSuccess('Pagamento com cartão processado (exemplo).');
+        const res = await fetch(
+          `${API_URL}/pagamento/${pagamento._id}/pix`
+        );
+        if (!res.ok) throw new Error();
+
+        const data = await res.json();
+        setPixData({
+          qrCodeBase64: data.qrCodeBase64,
+          copiaECola: data.copiaECola,
+        });
+        setAguardandoConfirmacao(true);
       }
-    } catch (error) {
-      setCardError('Erro ao conectar com o servidor.');
+
+      /* ---------- CARTÃO ---------- */
+      if (metodoPagamento === "CREDIT_CARD") {
+        if (!mpInstance.current) {
+          throw new Error("Mercado Pago não inicializado");
+        }
+
+        const [mes, ano] = cardForm.cardExpiration.split("/");
+
+        const tokenResponse = await mpInstance.current.createCardToken({
+          cardNumber: cardForm.cardNumber.replace(/\s/g, ""),
+          cardholderName: cardForm.cardholderName,
+          cardExpirationMonth: mes,
+          cardExpirationYear: `20${ano}`,
+          securityCode: cardForm.cardCvv,
+          identificationType: "CPF",
+          identificationNumber: cardForm.docNumber,
+        });
+
+        if (!tokenResponse?.id) {
+          throw new Error("Erro ao gerar token do cartão");
+        }
+
+        const res = await fetch(
+          `${API_URL}/pagamento/${pagamento._id}/cartao`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: tokenResponse.id,
+              parcelas,
+              email: cardForm.email,
+            }),
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error("Erro ao processar pagamento no backend");
+        }
+
+        setAguardandoConfirmacao(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setCardError("Erro ao processar pagamento.");
     } finally {
       setProcessando(false);
     }
   };
 
-  // Polling para atualizar status do pagamento enquanto aguarda PIX
+  /* ================= POLLING STATUS ================= */
   useEffect(() => {
-    if (aguardandoPix && pagamento?._id) {
-      const interval = setInterval(async () => {
-        try {
-          const response = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
-          if (response.ok) {
-            const data = await response.json();
-            setPagamento(data);
-            if (data.status === "Aprovado") {
-              setPixData(null);
-              setAguardandoPix(false);
-            }
-          }
-        } catch {}
-      }, 4000); // a cada 4 segundos
-      return () => clearInterval(interval);
-    }
-  }, [aguardandoPix, pagamento?._id]);
+    if (!aguardandoConfirmacao || !pagamento?._id) return;
 
-  if (loading) {
+    const interval = setInterval(async () => {
+      const res = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setPagamento(data);
+
+      if (data.status === "Aprovado") {
+        setPixData(null);
+        setAguardandoConfirmacao(false);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [aguardandoConfirmacao, pagamento?._id]);
+
+  /* ================= TELAS ================= */
+  if (loading)
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Carregando...</div>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
+        Carregando...
       </div>
     );
-  }
 
-  if (error || !pagamento) {
+  if (error || !pagamento)
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="bg-gray-800 p-8 rounded-xl text-center">
-          <h1 className="text-2xl font-bold text-red-500 mb-4">Erro</h1>
-          <p className="text-gray-400">{error || "Pagamento não encontrado"}</p>
-        </div>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-red-500">
+        {error}
       </div>
     );
-  }
 
   if (pagamento.status === "Aprovado") {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 p-8 rounded-xl text-center max-w-md">
-          <div className="text-6xl mb-4">✅</div>
-          <h1 className="text-2xl font-bold text-green-500 mb-4">Pagamento Confirmado!</h1>
-          <p className="text-gray-400 mb-4">
-            Obrigado, {pagamento.clienteId?.nome}! Seu pagamento foi processado com sucesso.
-          </p>
-          <p className="text-gray-500 text-sm">
-            Seu pedido está sendo preparado e em breve você receberá atualizações.
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="bg-gray-800 p-8 rounded-xl text-center">
+          <h1 className="text-2xl font-bold text-green-500">
+            Pagamento Confirmado!
+          </h1>
+          <p className="text-gray-400 mt-2">
+            Obrigado, {pagamento.clienteId.nome}.
           </p>
         </div>
       </div>
     );
   }
 
-  // Substituir toda a renderização de métodos de pagamento por uma mensagem de orientação
-  if (cardSuccess) {
+  if (pixData && aguardandoConfirmacao) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="bg-gray-800 p-8 rounded-xl text-center">
-          <h1 className="text-2xl font-bold text-green-500 mb-4">Venda realizada!</h1>
-          <p className="text-gray-400 mb-4">O link de pagamento foi enviado para o e-mail do cliente.</p>
-          <p className="text-gray-500 text-sm">O cliente poderá escolher PIX, cartão ou boleto ao clicar no link.</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Exibir o QR Code PIX se disponível
-  if (pixData && aguardandoPix) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="bg-gray-800 p-8 rounded-xl text-center">
-          <h1 className="text-2xl font-bold text-green-500 mb-4">Pague com PIX</h1>
+          <h1 className="text-xl text-green-500 mb-4">Pague com PIX</h1>
           <img
             src={`data:image/png;base64,${pixData.qrCodeBase64}`}
-            alt="QR Code PIX"
             className="mx-auto mb-4"
-            style={{ width: 200, height: 200 }}
           />
-          <p className="text-gray-400 mb-2">Escaneie o QR Code acima ou copie o código abaixo:</p>
-          <div className="bg-gray-700 rounded p-2 mb-2 text-sm break-all select-all">
+          <div className="bg-gray-700 p-2 rounded text-sm break-all">
             {pixData.copiaECola}
           </div>
-          <p className="text-gray-500 text-xs">Após o pagamento, aguarde a confirmação automática nesta tela.</p>
-          <button
-            className="mt-4 px-4 py-2 bg-orange-600 rounded text-white font-bold"
-            onClick={() => { setPixData(null); setAguardandoPix(false); }}
-          >
-            Voltar
-          </button>
+          <p className="text-xs text-gray-400 mt-2">
+            Aguardando confirmação automática…
+          </p>
         </div>
       </div>
     );
@@ -412,7 +428,6 @@ export default function PagamentoPage() {
             </div>
 
             {cardError && <div className="text-red-400 text-sm mb-2">{cardError}</div>}
-            {cardSuccess && <div className="text-green-400 text-sm mb-2">{cardSuccess}</div>}
           </div>
         )}
 

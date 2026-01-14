@@ -57,21 +57,6 @@ const updatePagamentoByExternalId = async (externalId, fieldsToUpdate) => {
     .populate('pedidos');
 };
 
-const confirmarPagamento = async ({ id, externalPaymentId, metodoPagamento }) => {
-    return Pagamento.findByIdAndUpdate(
-        id,
-        {
-            status: 'Pago',
-            metodoPagamento,
-            externalPaymentId,
-            pagoEm: new Date()
-        },
-        { new: true }
-    )
-    .populate('clienteId')
-    .populate('pedidos');
-};
-
 const deletePagamento = async (id) => {
     return Pagamento.findByIdAndDelete(id);
 };
@@ -85,6 +70,5 @@ export default {
     savePagamento,
     updatePagamento,
     updatePagamentoByExternalId,
-    confirmarPagamento,
     deletePagamento
 };
