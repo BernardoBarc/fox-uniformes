@@ -161,18 +161,27 @@ export default function PagamentoPage() {
         }
 
         /* ===== DETECTAR BANDEIRA (VISA / MASTERCARD) ===== */
-        const bin = cardForm.cardNumber.replace(/\s/g, "").substring(0, 6);
-        const paymentMethods = await mpInstance.current.getPaymentMethods({
-          bin,
-        });
+      const bin = cardForm.cardNumber.replace(/\s/g, "").substring(0, 6);
 
-        const paymentMethodId = paymentMethods?.results?.[0]?.id;
+      const paymentMethods = await mpInstance.current.getPaymentMethods({ bin });
+      const paymentMethodId = paymentMethods?.results?.[0]?.id;
 
-        if (!paymentMethodId) {
-          throw new Error("Bandeira do cartão não identificada");
-        }
+      if (!paymentMethodId) {
+        throw new Error("Bandeira do cartão não identificada");
+      }
 
-        const res = await fetch(
+      const issuers = await mpInstance.current.getIssuers({
+        paymentMethodId,
+       bin,
+      });
+
+      const issuerId = issuers?.results?.[0]?.id;
+
+      if (!issuerId) {
+        throw new Error("Emissor do cartão não identificado");
+      }
+
+      const res = await fetch(
           `${API_URL}/pagamento/${pagamento._id}/cartao`,
           {
             method: "POST",
@@ -182,6 +191,8 @@ export default function PagamentoPage() {
               installments: parcelas,
               cpf: cardForm.docNumber,
               paymentMethodId,
+              issuerId,
+              email: cardForm.email
             }),
           }
         );

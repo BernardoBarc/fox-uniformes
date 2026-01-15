@@ -141,6 +141,8 @@ const gerarPixParaPagamento = async (pagamentoId) => {
   const cliente = await Cliente.findById(pagamento.clienteId);
   if (!cliente) throw new Error('Cliente não encontrado');
 
+  const [firstName, ...lastNameParts] = cliente.nome.split(' ');
+
   const response = await paymentApi.create({
     body: {
       transaction_amount: Number(pagamento.valorTotal),
@@ -148,7 +150,8 @@ const gerarPixParaPagamento = async (pagamentoId) => {
       description: `Pedido ${pagamentoId}`,
       payer: {
         email: cliente.email,
-        first_name: cliente.nome
+        first_name: firstName,
+        last_name: lastNameParts.join(' ') || 'Cliente'
       },
       external_reference: pagamentoId,
       notification_url: `${BACKEND_URL}/webhook/mercadopago`
@@ -195,24 +198,30 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
   }
 
   try {
+    const [firstName, ...lastNameParts] = cliente.nome.split(' ');
+    const lastName = lastNameParts.join(' ') || 'Cliente';
+
     const response = await paymentApi.create({
       body: {
         transaction_amount: Number(pagamento.valorTotal),
         token: dadosCartao.token,
-        installments: dadosCartao.installments,
-        payment_method_id: dadosCartao.paymentMethodId, // visa | master
+        installments: Number(dadosCartao.installments) || 1,
+        payment_method_id: dadosCartao.paymentMethodId,
+        issuer_id: dadosCartao.issuerId,
         payer: {
-          email: cliente.email,
-          first_name: cliente.nome,
+          email: dadosCartao.email || cliente.email,
+          first_name: firstName,
+          last_name: lastName,
           identification: {
             type: 'CPF',
             number: dadosCartao.cpf
           }
         },
         external_reference: pagamentoId,
-        notification_url: `${BACKEND_URL}/webhook/mercadopago`
-      }
-    });
+    notification_url: `${BACKEND_URL}/webhook/mercadopago`
+  }
+});
+
 
     const payment = response.body;
 
