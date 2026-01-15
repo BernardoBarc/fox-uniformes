@@ -155,8 +155,7 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     }
   });
 
-  const payment =
-    response.body || response.response || response;
+  const payment = response.body || response;
 
   const pixData =
     payment.point_of_interaction?.transaction_data;
@@ -181,7 +180,7 @@ const gerarPixParaPagamento = async (pagamentoId) => {
 };
 
 /* =====================================================
-   CARTÃO DE CRÉDITO (CORRIGIDO)
+   CARTÃO DE CRÉDITO (VISA + MASTERCARD)
 ===================================================== */
 
 const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
@@ -195,38 +194,51 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
     throw new Error('CPF inválido');
   }
 
- const response = await paymentApi.create({
-  body: {
-    transaction_amount: Number(pagamento.valorTotal),
-    token: dadosCartao.token,
-    installments: dadosCartao.installments,
-    payer: {
-      email: cliente.email,
-      first_name: cliente.nome,
-      identification: {
-        type: 'CPF',
-        number: dadosCartao.cpf
+  try {
+    const response = await paymentApi.create({
+      body: {
+        transaction_amount: Number(pagamento.valorTotal),
+        token: dadosCartao.token,
+        installments: dadosCartao.installments,
+        payment_method_id: dadosCartao.paymentMethodId, // visa | master
+        payer: {
+          email: cliente.email,
+          first_name: cliente.nome,
+          identification: {
+            type: 'CPF',
+            number: dadosCartao.cpf
+          }
+        },
+        external_reference: pagamentoId,
+        notification_url: `${BACKEND_URL}/webhook/mercadopago`
       }
-    },
-    external_reference: pagamentoId,
-    notification_url: `${BACKEND_URL}/webhook/mercadopago`
+    });
+
+    const payment = response.body;
+
+    await pagamentoRepository.updatePagamento(pagamentoId, {
+      metodoPagamento: 'Cartão de Crédito',
+      externalId: payment.id,
+      parcelas: dadosCartao.installments,
+      status: 'Em processamento'
+    });
+
+    return {
+      sucesso: true,
+      status: payment.status
+    };
+
+  } catch (error) {
+    console.error(
+      '❌ Erro Mercado Pago Cartão:',
+      error?.response?.data || error
+    );
+
+    throw new Error(
+      error?.response?.data?.message ||
+      'Erro ao processar pagamento com cartão'
+    );
   }
-});
-
-const payment = response.body;
-
-await pagamentoRepository.updatePagamento(pagamentoId, {
-  metodoPagamento: 'Cartão de Crédito',
-  externalId: payment.id,
-  parcelas: dadosCartao.installments,
-  status: 'Em processamento'
-});
-
-
-  return {
-    sucesso: true,
-    status: payment.status
-  };
 };
 
 /* =====================================================
@@ -289,10 +301,7 @@ const gerarNotaFiscalPagamento = async (
     precoTotal: p.preco
   }));
 
-  const {
-    numeroNota,
-    caminho
-  } = await gerarNotaFiscal({
+  const { numeroNota, caminho } = await gerarNotaFiscal({
     cliente,
     itens,
     valorTotal: pagamento.valorTotal,

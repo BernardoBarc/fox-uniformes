@@ -160,6 +160,18 @@ export default function PagamentoPage() {
           throw new Error("Erro ao gerar token do cartão");
         }
 
+        /* ===== DETECTAR BANDEIRA (VISA / MASTERCARD) ===== */
+        const bin = cardForm.cardNumber.replace(/\s/g, "").substring(0, 6);
+        const paymentMethods = await mpInstance.current.getPaymentMethods({
+          bin,
+        });
+
+        const paymentMethodId = paymentMethods?.results?.[0]?.id;
+
+        if (!paymentMethodId) {
+          throw new Error("Bandeira do cartão não identificada");
+        }
+
         const res = await fetch(
           `${API_URL}/pagamento/${pagamento._id}/cartao`,
           {
@@ -167,8 +179,9 @@ export default function PagamentoPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               token: tokenResponse.id,
-              parcelas,
-              email: cardForm.email,
+              installments: parcelas,
+              cpf: cardForm.docNumber,
+              paymentMethodId,
             }),
           }
         );
