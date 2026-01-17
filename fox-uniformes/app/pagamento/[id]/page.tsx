@@ -93,19 +93,21 @@ export default function PagamentoPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const publicKey = process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY;
+    if (!publicKey) {
+      console.error("❌ Public Key do Mercado Pago não definida");
+      return;
+    }
+
     if (!window.MercadoPago) {
       const script = document.createElement("script");
       script.src = "https://sdk.mercadopago.com/js/v2";
       script.onload = () => {
-        mpInstance.current = new window.MercadoPago(
-          process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY
-        );
+        mpInstance.current = new window.MercadoPago(publicKey);
       };
       document.body.appendChild(script);
     } else {
-      mpInstance.current = new window.MercadoPago(
-        process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY
-      );
+      mpInstance.current = new window.MercadoPago(publicKey);
     }
   }, []);
 
@@ -146,6 +148,10 @@ export default function PagamentoPage() {
 
         const [mes, ano] = cardForm.cardExpiration.split("/");
 
+        if (!mes || !ano) {
+          throw new Error("Validade do cartão inválida");
+        }
+
         const tokenResponse = await mpInstance.current.createCardToken({
           cardNumber: cardForm.cardNumber.replace(/\s/g, ""),
           cardholderName: cardForm.cardholderName,
@@ -160,28 +166,28 @@ export default function PagamentoPage() {
           throw new Error("Erro ao gerar token do cartão");
         }
 
-        /* ===== DETECTAR BANDEIRA (VISA / MASTERCARD) ===== */
-      const bin = cardForm.cardNumber.replace(/\s/g, "").substring(0, 6);
+        /* ===== IDENTIFICAR BANDEIRA (VISA / MASTERCARD) ===== */
+        const bin = cardForm.cardNumber.replace(/\s/g, "").substring(0, 6);
 
-      const paymentMethods = await mpInstance.current.getPaymentMethods({ bin });
-      const paymentMethodId = paymentMethods?.results?.[0]?.id;
+        const paymentMethods = await mpInstance.current.getPaymentMethods({ bin });
+        const paymentMethodId = paymentMethods?.results?.[0]?.id;
 
-      if (!paymentMethodId) {
-        throw new Error("Bandeira do cartão não identificada");
-      }
+        if (!paymentMethodId) {
+          throw new Error("Bandeira do cartão não identificada");
+        }
 
-      const issuers = await mpInstance.current.getIssuers({
-        paymentMethodId,
-       bin,
-      });
+        const issuers = await mpInstance.current.getIssuers({
+          paymentMethodId,
+          bin,
+        });
 
-      const issuerId = issuers?.results?.[0]?.id;
+        const issuerId = issuers?.results?.[0]?.id;
 
-      if (!issuerId) {
-        throw new Error("Emissor do cartão não identificado");
-      }
+        if (!issuerId) {
+          throw new Error("Emissor do cartão não identificado");
+        }
 
-      const res = await fetch(
+        const res = await fetch(
           `${API_URL}/pagamento/${pagamento._id}/cartao`,
           {
             method: "POST",
@@ -192,7 +198,7 @@ export default function PagamentoPage() {
               cpf: cardForm.docNumber,
               paymentMethodId,
               issuerId,
-              email: cardForm.email
+              email: cardForm.email,
             }),
           }
         );

@@ -629,9 +629,9 @@ export default function DashboardPage() {
       }
 
       const mensagemSucesso = cupomAplicado 
-        ? `Venda finalizada com desconto de ${cupomAplicado.desconto}%! ${carrinho.length} pedido(s) criado(s). Link de pagamento enviado via WhatsApp.`
-        : `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso! Link de pagamento enviado via WhatsApp.`;
-      
+        ? `Venda finalizada com desconto de ${cupomAplicado.desconto}%! ${carrinho.length} pedido(s) criado(s). Link de pagamento enviado para o email do cliente.`
+        : `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso! Link de pagamento enviado para o email do cliente.`;
+
       setMessage({ type: "success", text: mensagemSucesso });
       setNovoPedido({ nomeCliente: "", cpfCliente: "", telefoneCliente: "", entrega: "" });
       setClienteSelecionado(null);
@@ -1370,7 +1370,7 @@ export default function DashboardPage() {
                         {/* Info sobre pagamento */}
                         <div className="mt-4 p-3 bg-blue-900/30 rounded-lg border border-blue-500/30">
                           <p className="text-xs text-blue-300">
-                            💳 Ao finalizar, um link de pagamento será enviado via WhatsApp para o cliente com opções de PIX e Cartão de Crédito.
+                            💳 Ao finalizar, um link de pagamento será enviado via Email para o cliente com opções de PIX e Cartão de Crédito.
                           </p>
                         </div>
                       </>

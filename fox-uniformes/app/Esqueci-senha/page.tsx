@@ -38,7 +38,7 @@ const EsqueciSenha: React.FC = () => {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
       <header className="mb-8">
-        <img src="/next.svg" alt="Logo" className="h-12" />
+        <img src="/next.svg" alt="logoPreto.png" className="h-12" />
       </header>
       <p className="text-4xl font-bold">Esqueci minha senha</p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-1/3">

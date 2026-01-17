@@ -158,7 +158,7 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     }
   });
 
-  const payment = response.body || response;
+  const payment = response.body;
 
   const pixData =
     payment.point_of_interaction?.transaction_data;
@@ -183,7 +183,7 @@ const gerarPixParaPagamento = async (pagamentoId) => {
 };
 
 /* =====================================================
-   CARTÃO DE CRÉDITO (VISA + MASTERCARD)
+   CARTÃO DE CRÉDITO (VISA / MASTERCARD)
 ===================================================== */
 
 const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
@@ -197,16 +197,20 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
     throw new Error('CPF inválido');
   }
 
-  try {
-    const [firstName, ...lastNameParts] = cliente.nome.split(' ');
-    const lastName = lastNameParts.join(' ') || 'Cliente';
+  if (!dadosCartao.paymentMethodId || !dadosCartao.issuerId) {
+    throw new Error('Dados do cartão incompletos');
+  }
 
+  const [firstName, ...lastNameParts] = cliente.nome.split(' ');
+  const lastName = lastNameParts.join(' ') || 'Cliente';
+
+  try {
     const response = await paymentApi.create({
       body: {
         transaction_amount: Number(pagamento.valorTotal),
         token: dadosCartao.token,
         installments: Number(dadosCartao.installments) || 1,
-        payment_method_id: dadosCartao.paymentMethodId,
+        payment_method_id: dadosCartao.paymentMethodId, // visa | mastercard
         issuer_id: dadosCartao.issuerId,
         payer: {
           email: dadosCartao.email || cliente.email,
@@ -218,10 +222,9 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
           }
         },
         external_reference: pagamentoId,
-    notification_url: `${BACKEND_URL}/webhook/mercadopago`
-  }
-});
-
+        notification_url: `${BACKEND_URL}/webhook/mercadopago`
+      }
+    });
 
     const payment = response.body;
 
@@ -229,7 +232,7 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
       metodoPagamento: 'Cartão de Crédito',
       externalId: payment.id,
       parcelas: dadosCartao.installments,
-      status: 'Em processamento'
+      status: payment.status === 'approved' ? 'Aprovado' : 'Em processamento'
     });
 
     return {

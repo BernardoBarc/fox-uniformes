@@ -606,7 +606,7 @@ export default function AdminDashboardPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: "success", text: "Cupom criado com sucesso! Clientes serão notificados via WhatsApp." });
+        setMessage({ type: "success", text: "Cupom criado com sucesso! Clientes serão notificados através do Email cadastrado." });
         setNovoCupom({
           codigo: "",
           desconto: 10,
@@ -1547,7 +1547,7 @@ export default function AdminDashboardPage() {
                         onChange={(e) => setNovoCupom({ ...novoCupom, notificarClientes: e.target.checked })}
                         className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-orange-500 focus:ring-orange-500"
                       />
-                      <span className="text-gray-300">📱 Notificar todos os clientes via WhatsApp</span>
+                      <span className="text-gray-300">📱 Notificar todos os clientes através do Email</span>
                     </label>
                     <p className="text-xs text-gray-500 mt-1 ml-7">
                       Uma mensagem será enviada automaticamente para todos os clientes cadastrados
