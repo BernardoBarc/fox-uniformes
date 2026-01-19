@@ -197,35 +197,40 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
     throw new Error('CPF inválido');
   }
 
-  if (!dadosCartao.paymentMethodId || !dadosCartao.issuerId) {
-    throw new Error('Dados do cartão incompletos');
+  if (!dadosCartao.paymentMethodId) {
+    throw new Error('Bandeira do cartão não identificada');
   }
+
 
   const [firstName, ...lastNameParts] = cliente.nome.split(' ');
   const lastName = lastNameParts.join(' ') || 'Cliente';
 
   try {
-    const response = await paymentApi.create({
-      body: {
-        transaction_amount: Number(pagamento.valorTotal),
-        token: dadosCartao.token,
-        installments: Number(dadosCartao.installments) || 1,
-        payment_method_id: dadosCartao.paymentMethodId, // visa | mastercard
-        issuer_id: dadosCartao.issuerId,
-        payer: {
-          email: dadosCartao.email || cliente.email,
-          first_name: firstName,
-          last_name: lastName,
-          identification: {
-            type: 'CPF',
-            number: dadosCartao.cpf
-          }
-        },
-        external_reference: pagamentoId,
-        notification_url: `${BACKEND_URL}/webhook/mercadopago`
-      }
-    });
+    const paymentBody = {
+      transaction_amount: Number(pagamento.valorTotal),
+      token: dadosCartao.token,
+      installments: Number(dadosCartao.installments) || 1,
+      payment_method_id: dadosCartao.paymentMethodId,
+      payer: {
+        email: dadosCartao.email || cliente.email,
+        first_name: firstName,
+        last_name: lastName,
+        identification: {
+          type: 'CPF',
+          number: dadosCartao.cpf
+        }
+      },
+      external_reference: pagamentoId,
+      notification_url: `${BACKEND_URL}/webhook/mercadopago`,
+      binary_mode: true // IMPORTANTE
+    };
 
+// 👉 Só adiciona issuer_id se existir
+    if (dadosCartao.issuerId) {
+      paymentBody.issuer_id = dadosCartao.issuerId;
+    }
+
+    const response = await paymentApi.create({ body: paymentBody });
     const payment = response.body;
 
     await pagamentoRepository.updatePagamento(pagamentoId, {

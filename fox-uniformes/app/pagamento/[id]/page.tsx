@@ -176,15 +176,17 @@ export default function PagamentoPage() {
           throw new Error("Bandeira do cartão não identificada");
         }
 
-        const issuers = await mpInstance.current.getIssuers({
-          paymentMethodId,
-          bin,
+        let issuerId: string | undefined;
+
+        try {
+          const issuers = await mpInstance.current.getIssuers({
+            paymentMethodId,
+            bin,
         });
 
-        const issuerId = issuers?.results?.[0]?.id;
-
-        if (!issuerId) {
-          throw new Error("Emissor do cartão não identificado");
+          issuerId = issuers?.results?.[0]?.id;
+        } catch {
+          issuerId = undefined;
         }
 
         const res = await fetch(
