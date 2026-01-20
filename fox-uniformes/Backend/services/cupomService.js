@@ -1,12 +1,6 @@
 import cupomRepository from '../repository/cupomRepository.js';
 import clienteRepository from '../repository/clienteRepository.js';
-import Resend from 'resend';
-
-// Função para enviar mensagem WhatsApp (simulada - integrar com Evolution API)
-const resend = new Resend (process.env.RESEND_API_KEY);
-
-const EMAIL_FROM =
-  process.env.EMAIL_FROM || 'Fox Uniformes <onboarding@resend.dev>';
+import emailService from './emailService.js';
 
 // Criar novo cupom e notificar clientes
 const criarCupom = async (cupomData, notificarClientes = true) => {
@@ -18,7 +12,7 @@ const criarCupom = async (cupomData, notificarClientes = true) => {
 
     const novoCupom = await cupomRepository.save(cupomData);
 
-    // Notificar todos os clientes via WhatsApp
+    // Notificar todos os clientes via WhatsApp e E-mail
     if (notificarClientes) {
         await notificarClientesSobreCupom(novoCupom);
     }
@@ -30,24 +24,13 @@ const criarCupom = async (cupomData, notificarClientes = true) => {
 const notificarClientesSobreCupom = async (cupom) => {
     try {
         const clientes = await clienteRepository.getAllClientes();
-        
-        const mensagem = `🎉 *FOX UNIFORMES - CUPOM DE DESCONTO!* 🎉
-
-Temos uma oferta especial para você!
-
-🏷️ *Cupom:* ${cupom.codigo}
-💰 *Desconto:* ${cupom.desconto}%
-${cupom.valorMinimo > 0 ? `📦 *Valor mínimo:* R$ ${cupom.valorMinimo.toFixed(2)}` : ''}
-${cupom.dataValidade ? `📅 *Válido até:* ${new Date(cupom.dataValidade).toLocaleDateString('pt-BR')}` : '✅ *Sem data de validade*'}
-
-Aproveite esta oportunidade! 🛍️
-
-_Fox Uniformes - Qualidade que você veste!_`;
+        const mensagem = `🎉 *FOX UNIFORMES - CUPOM DE DESCONTO!* 🎉\n\nTemos uma oferta especial para você!\n\n🏷️ *Cupom:* ${cupom.codigo}\n💰 *Desconto:* ${cupom.desconto}%\n${cupom.valorMinimo > 0 ? `📦 *Valor mínimo:* R$ ${cupom.valorMinimo.toFixed(2)}` : ''}\n${cupom.dataValidade ? `📅 *Válido até:* ${new Date(cupom.dataValidade).toLocaleDateString('pt-BR')}` : '✅ *Sem data de validade*'}\n\nAproveite esta oportunidade! 🛍️\n\n_Fox Uniformes - Qualidade que você veste!_`;
 
         let enviados = 0;
         let erros = 0;
 
         for (const cliente of clientes) {
+            // Envio WhatsApp
             if (cliente.telefone) {
                 const resultado = await enviarWhatsApp(cliente.telefone, mensagem);
                 if (resultado.success) {
@@ -55,8 +38,23 @@ _Fox Uniformes - Qualidade que você veste!_`;
                 } else {
                     erros++;
                 }
-                // Pequeno delay para não sobrecarregar a API
                 await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            // Envio E-mail
+            if (cliente.email) {
+                try {
+                    await emailService.enviarCupom({
+                        para: cliente.email,
+                        nome: cliente.nome || cliente.razaoSocial || 'Cliente',
+                        codigoCupom: cupom.codigo,
+                        valorCupom: cupom.valorDesconto || 0,
+                        validadeCupom: cupom.dataValidade ? new Date(cupom.dataValidade).toLocaleDateString('pt-BR') : 'Sem data de validade',
+                        linkCompra: cupom.linkCompra || '',
+                    });
+                    enviados++;
+                } catch (err) {
+                    erros++;
+                }
             }
         }
 
