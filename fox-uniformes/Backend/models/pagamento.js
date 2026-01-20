@@ -16,12 +16,12 @@ const pagamentoSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pendente', 'Pago', 'Recusado', 'Cancelado', 'Reembolsado'],
+        enum: ['Pendente','Aprovado', 'Recusado', 'Cancelado', 'Reembolsado'],
         default: 'Pendente',
     },
     metodoPagamento: {
         type: String,
-        enum: ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'BOLETO'],
+        enum: ['PIX', 'CREDIT_CARD', 'DEBIT_CARD'],
     },
     parcelas: {
         type: Number,
@@ -56,13 +56,6 @@ const pagamentoSchema = new mongoose.Schema({
     webhookProcessado: {
         type: Boolean,
         default: false,
-    },
-    whatsappEnviado: {
-        type: Boolean,
-        default: false,
-    },
-    whatsappEnviadoEm: {
-        type: Date,
     },
     pagoEm: {
         type: Date,

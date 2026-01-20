@@ -2,6 +2,4 @@
 problemas.md
 README.md
 node_modules/
-.next
-DOCUMENTOS.md
-.env.local
+.next/

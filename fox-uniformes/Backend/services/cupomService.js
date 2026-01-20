@@ -1,35 +1,12 @@
 import cupomRepository from '../repository/cupomRepository.js';
 import clienteRepository from '../repository/clienteRepository.js';
+import Resend from 'resend';
 
 // Função para enviar mensagem WhatsApp (simulada - integrar com Evolution API)
-const enviarWhatsApp = async (telefone, mensagem) => {
-    const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL;
-    const WHATSAPP_API_TOKEN = process.env.WHATSAPP_API_TOKEN;
+const resend = new Resend (process.env.RESEND_API_KEY);
 
-    if (!WHATSAPP_API_URL || !WHATSAPP_API_TOKEN) {
-        console.log(`[WhatsApp Simulado] Para: ${telefone}`);
-        console.log(`[WhatsApp Simulado] Mensagem: ${mensagem}`);
-        return { success: true, simulated: true };
-    }
-
-    try {
-        const response = await fetch(`${WHATSAPP_API_URL}/message/sendText/fox-uniformes`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': WHATSAPP_API_TOKEN
-            },
-            body: JSON.stringify({
-                number: telefone.replace(/\D/g, ''),
-                text: mensagem
-            })
-        });
-        return { success: response.ok };
-    } catch (error) {
-        console.error('Erro ao enviar WhatsApp:', error);
-        return { success: false, error };
-    }
-};
+const EMAIL_FROM =
+  process.env.EMAIL_FROM || 'Fox Uniformes <onboarding@resend.dev>';
 
 // Criar novo cupom e notificar clientes
 const criarCupom = async (cupomData, notificarClientes = true) => {

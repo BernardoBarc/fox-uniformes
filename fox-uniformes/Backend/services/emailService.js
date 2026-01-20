@@ -102,11 +102,13 @@ const enviarNotaFiscal = async ({
   nome,
   numeroNota,
   caminhoPdf,
+  linkAcompanhamento,
 }) => {
   console.log('[EMAIL] Envio nota fiscal:', {
     para,
     numeroNota,
     caminhoPdf,
+    linkAcompanhamento,
   });
 
   if (!para) {
@@ -131,6 +133,27 @@ const enviarNotaFiscal = async ({
         <p>
           Guarde este documento para seus registros.
         </p>
+
+        ${
+          linkAcompanhamento
+            ? `
+          <hr />
+          <p>Você pode acompanhar o status do seu pedido pelo link abaixo:</p>
+          <a href="${linkAcompanhamento}"
+             style="
+               display:inline-block;
+               padding:10px 18px;
+               background:#2563eb;
+               color:#fff;
+               text-decoration:none;
+               border-radius:6px;
+               margin-top:8px;
+             ">
+            Acompanhar Pedido
+          </a>
+        `
+            : ''
+        }
 
         <hr />
 
@@ -160,7 +183,81 @@ const enviarNotaFiscal = async ({
   }
 };
 
+/**
+ * Envia e-mail com CUPOM para o cliente
+ */
+const enviarCupom = async ({
+  para,
+  nome,
+  codigoCupom,
+  valorCupom,
+  validadeCupom,
+  linkCompra,
+}) => {
+  console.log('[EMAIL] Envio cupom:', {
+    para,
+    codigoCupom,
+    valorCupom,
+    validadeCupom,
+    linkCompra,
+  });
+
+  if (!para) {
+    console.warn('[EMAIL] Cliente sem e-mail, envio ignorado');
+    return;
+  }
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <h2>Olá, ${nome} 👋</h2>
+
+      <p>Você recebeu um <strong>CUPOM DE DESCONTO</strong> para usar na Fox Uniformes!</p>
+
+      <p><strong>Código do Cupom:</strong> <span style="background:#f4f4f4;padding:4px 8px;border-radius:4px;font-weight:bold;">${codigoCupom}</span></p>
+      <p><strong>Valor:</strong> R$ ${valorCupom.toFixed(2)}</p>
+      <p><strong>Validade:</strong> ${validadeCupom}</p>
+
+      ${
+        linkCompra
+          ? `
+        <a href="${linkCompra}"
+           style="
+             display:inline-block;
+             padding:12px 20px;
+             background:#22c55e;
+             color:#fff;
+             text-decoration:none;
+             border-radius:6px;
+             margin-top:10px;
+           ">
+          Usar Cupom Agora
+        </a>
+      `
+          : ''
+      }
+
+      <hr />
+      <p style="font-size:12px;color:#777;">
+        Fox Uniformes • Este é um e-mail automático
+      </p>
+    </div>
+  `;
+
+  try {
+    await resend.emails.send({
+      from: EMAIL_FROM,
+      to: para,
+      subject: '🦊 Fox Uniformes - Cupom de Desconto',
+      html,
+    });
+    console.log(`📧 Cupom enviado para ${para}`);
+  } catch (err) {
+    console.error('❌ Erro ao enviar e-mail de cupom:', err);
+  }
+};
+
 export default {
   enviarLinkPagamento,
   enviarNotaFiscal,
+  enviarCupom,
 };

@@ -84,7 +84,7 @@ const criarPagamento = async ({
     pedidos,
     valorTotal,
     status: 'Pendente',
-    processadoWebhook: false
+    webhookProcessado: false
   });
 
   const pedidosDb = await Pedido.find({
@@ -169,8 +169,9 @@ const gerarPixParaPagamento = async (pagamentoId) => {
 
   await pagamentoRepository.updatePagamento(pagamentoId, {
     metodoPagamento: 'PIX',
-    externalId: payment.id,
+    externalId: String(payment.id),
     pix: {
+      qrCode: pixData.qr_code,
       copiaECola: pixData.qr_code,
       qrCodeBase64: pixData.qr_code_base64
     }
@@ -234,7 +235,7 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
     const payment = response.body;
 
     await pagamentoRepository.updatePagamento(pagamentoId, {
-      metodoPagamento: 'Cartão de Crédito',
+      metodoPagamento: 'CREDIT_CARD',
       externalId: payment.id,
       parcelas: dadosCartao.installments,
       status: payment.status === 'approved' ? 'Aprovado' : 'Pendente'
@@ -271,7 +272,7 @@ const confirmarPagamentoPorExternalId = async (
   const pagamento =
     await pagamentoRepository.getPagamentoById(pagamentoId);
 
-  if (!pagamento || pagamento.processadoWebhook) return;
+  if (!pagamento || pagamento.webhookProcessado) return;
 
   const cliente = await Cliente.findById(pagamento.clienteId);
 
@@ -280,7 +281,7 @@ const confirmarPagamentoPorExternalId = async (
     metodoPagamento,
     externalId: paymentId,
     pagamentoConfirmadoEm: new Date(),
-    processadoWebhook: true
+    webhookProcessado: true
   });
 
   await atualizarStatusPedidos(pagamento.pedidos, 'Pendente');
