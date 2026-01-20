@@ -4,10 +4,6 @@ import { MercadoPagoConfig, Payment } from 'mercadopago';
 
 const router = express.Router();
 
-/**
- * Configuração Mercado Pago
- * Criada uma única vez (evita recriação no webhook)
- */
 const mpClient = new MercadoPagoConfig({
   accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN
 });
@@ -75,12 +71,8 @@ router.post('/pagamento/criar', async (req, res) => {
       clienteId,
       pedidos,
       valorTotal,
-      telefone,
       nomeCliente,
       metodoPagamento,
-      cardToken,
-      installments,
-      payer
     } = req.body;
 
     if (!clienteId || !valorTotal) {
@@ -92,17 +84,7 @@ router.post('/pagamento/criar', async (req, res) => {
 
     let resultado;
     try {
-      resultado = await pagamentoService.criarPagamento({
-        clienteId,
-        pedidos,
-        valorTotal,
-        telefone,
-        nomeCliente,
-        metodoPagamento,
-        cardToken,
-        installments,
-        payer
-      });
+      resultado = await pagamentoService.criarPagamento({ clienteId, pedidos, valorTotal, nomeCliente })
     } catch (serviceError) {
       return res.status(500).json({
         error: serviceError.message || 'Erro ao processar pagamento'
@@ -134,31 +116,6 @@ router.post('/pagamento/criar', async (req, res) => {
 // ============================
 // AÇÕES ADMIN
 // ============================
-
-router.post('/pagamento/:id/confirmar', async (req, res) => {
-  try {
-    const { metodoPagamento = 'PIX', parcelas = 1 } = req.body;
-
-    const resultado = await pagamentoService.confirmarPagamentoManual(
-      req.params.id,
-      metodoPagamento,
-      parcelas
-    );
-
-    if (!resultado) {
-      return res.status(404).json({ error: 'Pagamento não encontrado' });
-    }
-
-    res.json({
-      message: 'Pagamento confirmado com sucesso',
-      pagamento: resultado.pagamento,
-      notaFiscal: resultado.notaFiscal
-    });
-  } catch (error) {
-    console.error('Erro ao confirmar pagamento:', error);
-    res.status(500).json({ error: error.message || 'Erro interno do servidor' });
-  }
-});
 
 router.post('/pagamento/:id/cancelar', async (req, res) => {
   try {
@@ -198,7 +155,7 @@ router.post('/pagamento/:id/cartao', async (req, res) => {
     res.json(resultado);
   } catch (error) {
     console.error('Erro ao processar pagamento cartão:', error);
-    res.status(500).json({ error: error.message || 'Erro ao processar pagamento cartão' });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -239,19 +196,6 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
 
       console.log('✅ Pagamento aprovado processado');
     }
-
-    // ❌ Cancelamento / rejeição
-    if (payment.status === 'cancelled' || payment.status === 'rejected') {
-      await pagamentoService.cancelarPagamentoPorExternalId(
-        payment.external_reference,
-        payment.id,
-        payment.status
-      );
-
-      console.log('❌ Pagamento cancelado/rejeitado processado');
-    }
-
-    return res.status(200).send('OK');
   } catch (error) {
     console.error('Erro no webhook Mercado Pago:', error);
     return res.status(500).send('Erro interno');

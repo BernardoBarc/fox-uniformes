@@ -205,11 +205,13 @@ export default function PagamentoPage() {
           }
         );
 
-        if (!res.ok) {
-          throw new Error("Erro ao processar pagamento no backend");
-        }
+      const data = await res.json();
 
-        setAguardandoConfirmacao(true);
+      if (!data?.sucesso) {
+        throw new Error("Erro ao processar pagamento");
+      }
+
+      setAguardandoConfirmacao(true);
       }
     } catch (err) {
       console.error(err);
