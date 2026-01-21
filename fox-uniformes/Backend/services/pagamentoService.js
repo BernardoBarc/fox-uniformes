@@ -84,7 +84,7 @@ const criarPagamento = async ({
     pedidos,
     valorTotal,
     status: 'Pendente',
-    webhookProcessado: false
+    processadoWebhook: false
   });
 
   const pedidosDb = await Pedido.find({
@@ -272,7 +272,7 @@ const confirmarPagamentoPorExternalId = async (
   const pagamento =
     await pagamentoRepository.getPagamentoById(pagamentoId);
 
-  if (!pagamento || pagamento.webhookProcessado) return;
+  if (!pagamento || pagamento.processadoWebhook) return;
 
   const cliente = await Cliente.findById(pagamento.clienteId);
 
@@ -281,7 +281,7 @@ const confirmarPagamentoPorExternalId = async (
     metodoPagamento,
     externalId: paymentId,
     pagamentoConfirmadoEm: new Date(),
-    webhookProcessado: true
+    processadoWebhook: true
   });
 
   await atualizarStatusPedidos(pagamento.pedidos, 'Pendente');
