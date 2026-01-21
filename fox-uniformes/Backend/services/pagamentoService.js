@@ -84,7 +84,7 @@ const criarPagamento = async ({
     pedidos,
     valorTotal,
     status: 'Pendente',
-    processadoWebhook: false
+    webhookProcessado: false
   });
 
   const pedidosDb = await Pedido.find({
@@ -117,14 +117,16 @@ const criarPagamento = async ({
   });
 
   await pagamentoRepository.updatePagamento(pagamento._id, {
-    preferenceId: preference.body?.id
+    preferenceId: preference.body.id,
+    linkPagamento: preference.body.init_point
   });
+
 
   await emailService.enviarLinkPagamento({
     para: cliente.email,
     nome: cliente.nome,
     valorTotal,
-    linkPagamento: `${FRONTEND_URL}/pagamento/${pagamento._id}`
+    linkPagamento: preference.body.init_point
   });
 
   return pagamento;
@@ -272,7 +274,7 @@ const confirmarPagamentoPorExternalId = async (
   const pagamento =
     await pagamentoRepository.getPagamentoById(pagamentoId);
 
-  if (!pagamento || pagamento.processadoWebhook) return;
+  if (!pagamento || pagamento.webhookProcessado) return;
 
   const cliente = await Cliente.findById(pagamento.clienteId);
 
@@ -281,7 +283,7 @@ const confirmarPagamentoPorExternalId = async (
     metodoPagamento,
     externalId: paymentId,
     pagamentoConfirmadoEm: new Date(),
-    processadoWebhook: true
+    webhookProcessado: true
   });
 
   await atualizarStatusPedidos(pagamento.pedidos, 'Pendente');
