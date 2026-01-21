@@ -33,6 +33,10 @@ const getPagamentosPendentes = async () => {
 };
 
 const savePagamento = async (pagamentoData) => {
+    // Remover campos nulos que possam causar conflitos com índice único
+    if (pagamentoData && (pagamentoData.externalId === null || pagamentoData.externalId === undefined)) {
+        delete pagamentoData.externalId;
+    }
     const pagamento = new Pagamento(pagamentoData);
     return pagamento.save();
 };
