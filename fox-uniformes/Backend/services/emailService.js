@@ -14,14 +14,14 @@ const enviarLinkPagamento = async ({
   nome,
   valorTotal,
   linkPagamento,
-  pixCopiaECola,
+  pixCopiaECola
 }) => {
   console.log('[DEBUG] Função enviarLinkPagamento chamada', { para });
   console.log('[EMAIL] Envio link pagamento:', {
     para,
     valorTotal,
     linkPagamento,
-    pixCopiaECola,
+    pixCopiaECola
   });
 
   if (!para) {
@@ -103,13 +103,13 @@ const enviarNotaFiscal = async ({
   nome,
   numeroNota,
   caminhoPdf,
-  linkAcompanhamento,
+  linkAcompanhamento
 }) => {
   console.log('[EMAIL] Envio nota fiscal:', {
     para,
     numeroNota,
     caminhoPdf,
-    linkAcompanhamento,
+    linkAcompanhamento
   });
 
   if (!para) {
@@ -193,14 +193,14 @@ const enviarCupom = async ({
   codigoCupom,
   valorCupom,
   validadeCupom,
-  linkCompra,
+  linkCompra
 }) => {
   console.log('[EMAIL] Envio cupom:', {
     para,
     codigoCupom,
     valorCupom,
     validadeCupom,
-    linkCompra,
+    linkCompra
   });
 
   if (!para) {
