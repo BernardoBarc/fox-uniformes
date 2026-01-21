@@ -76,60 +76,74 @@ const criarPagamento = async ({
   valorTotal,
   nomeCliente
 }) => {
-  const cliente = await Cliente.findById(clienteId);
-  if (!cliente) throw new Error('Cliente não encontrado');
+  console.log('[DEBUG] iniciar criarPagamento', { clienteId, pedidos, valorTotal, nomeCliente });
+  try {
+    const cliente = await Cliente.findById(clienteId);
+    console.log('[DEBUG] cliente encontrado em criarPagamento', { clienteId, email: cliente?.email, nome: cliente?.nome });
+    if (!cliente) throw new Error('Cliente não encontrado');
 
-  const pagamento = await pagamentoRepository.savePagamento({
-    clienteId,
-    pedidos,
-    valorTotal,
-    status: 'Pendente',
-    webhookProcessado: false
-  });
+    const pagamento = await pagamentoRepository.savePagamento({
+      clienteId,
+      pedidos,
+      valorTotal,
+      status: 'Pendente',
+      webhookProcessado: false
+    });
+    console.log('[DEBUG] pagamento salvo', { pagamentoId: pagamento._id });
 
-  const pedidosDb = await Pedido.find({
-    _id: { $in: pedidos }
-  }).populate('produtoId');
+    const pedidosDb = await Pedido.find({
+      _id: { $in: pedidos }
+    }).populate('produtoId');
+    console.log('[DEBUG] pedidos carregados para preference', { count: pedidosDb.length });
 
-  const items = pedidosDb.map(p => ({
-    title: p.produtoId?.name || 'Produto',
-    quantity: p.quantidade,
-    unit_price: Number(p.preco),
-    currency_id: 'BRL'
-  }));
+    const items = pedidosDb.map(p => ({
+      title: p.produtoId?.name || 'Produto',
+      quantity: p.quantidade,
+      unit_price: Number(p.preco),
+      currency_id: 'BRL'
+    }));
 
-  const preference = await preferenceApi.create({
-    body: {
-      items,
-      payer: {
-        email: cliente.email,
-        name: nomeCliente
-      },
-      external_reference: pagamento._id.toString(),
-      notification_url: `${BACKEND_URL}/webhook/mercadopago`,
-      back_urls: {
-        success: `${FRONTEND_URL}/pagamento/sucesso`,
-        failure: `${FRONTEND_URL}/pagamento/erro`,
-        pending: `${FRONTEND_URL}/pagamento/pendente`
-      },
-      auto_return: 'approved'
-    }
-  });
+    const preference = await preferenceApi.create({
+      body: {
+        items,
+        payer: {
+          email: cliente.email,
+          name: nomeCliente
+        },
+        external_reference: pagamento._id.toString(),
+        notification_url: `${BACKEND_URL}/webhook/mercadopago`,
+        back_urls: {
+          success: `${FRONTEND_URL}/pagamento/sucesso`,
+          failure: `${FRONTEND_URL}/pagamento/erro`,
+          pending: `${FRONTEND_URL}/pagamento/pendente`
+        },
+        auto_return: 'approved'
+      }
+    });
 
-  await pagamentoRepository.updatePagamento(pagamento._id, {
-    preferenceId: preference.body.id,
-    linkPagamento: preference.body.init_point
-  });
+    console.log('[DEBUG] preference criada', { preferenceId: preference.body?.id });
 
+    await pagamentoRepository.updatePagamento(pagamento._id, {
+      preferenceId: preference.body?.id
+    });
 
-  await emailService.enviarLinkPagamento({
-    para: cliente.email,
-    nome: cliente.nome,
-    valorTotal,
-    linkPagamento: preference.body.init_point
-  });
+    console.log('[DEBUG] pagamento atualizado com preferenceId', { pagamentoId: pagamento._id, preferenceId: preference.body?.id });
 
-  return pagamento;
+    // Envia link de pagamento por e-mail
+    console.log('[DEBUG] chamando emailService.enviarLinkPagamento', { to: cliente.email });
+    await emailService.enviarLinkPagamento({
+      para: cliente.email,
+      nome: cliente.nome,
+      valorTotal,
+      linkPagamento: `${FRONTEND_URL}/pagamento/${pagamento._id}`
+    });
+    console.log('[DEBUG] emailService.enviarLinkPagamento concluído');
+
+    return pagamento;
+  } catch (error) {
+    console.error('Erro em criarPagamento:', error);
+    throw error;
+  }
 };
 
 /* =====================================================
@@ -137,10 +151,13 @@ const criarPagamento = async ({
 ===================================================== */
 
 const gerarPixParaPagamento = async (pagamentoId) => {
+  console.log('[DEBUG] iniciar gerarPixParaPagamento', { pagamentoId });
   const pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
+  console.log('[DEBUG] pagamento obtido para PIX', { pagamentoId, pagamento });
   if (!pagamento) throw new Error('Pagamento não encontrado');
 
   const cliente = await Cliente.findById(pagamento.clienteId);
+  console.log('[DEBUG] cliente obtido para PIX', { clienteId: cliente?._id, email: cliente?.email });
   if (!cliente) throw new Error('Cliente não encontrado');
 
   const [firstName, ...lastNameParts] = cliente.nome.split(' ');
@@ -160,12 +177,15 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     }
   });
 
+  console.log('[DEBUG] resposta paymentApi.create (PIX)', { status: response.status, bodyKeys: Object.keys(response.body || {}) });
+
   const payment = response.body;
 
   const pixData =
     payment.point_of_interaction?.transaction_data;
 
   if (!pixData) {
+    console.error('Erro: pixData não disponível na resposta do MP', { payment });
     throw new Error('Não foi possível gerar dados PIX');
   }
 
@@ -178,6 +198,8 @@ const gerarPixParaPagamento = async (pagamentoId) => {
       qrCodeBase64: pixData.qr_code_base64
     }
   });
+
+  console.log('[DEBUG] pagamento atualizado com dados PIX', { pagamentoId });
 
   return {
     copiaECola: pixData.qr_code,
@@ -271,12 +293,17 @@ const confirmarPagamentoPorExternalId = async (
   paymentId,
   metodoPagamento
 ) => {
+  console.log('[DEBUG] iniciar confirmarPagamentoPorExternalId', { pagamentoId, paymentId, metodoPagamento });
   const pagamento =
     await pagamentoRepository.getPagamentoById(pagamentoId);
 
-  if (!pagamento || pagamento.webhookProcessado) return;
+  if (!pagamento || pagamento.webhookProcessado) {
+    console.log('[DEBUG] pagamento não existe ou webhook já processado', { pagamentoId });
+    return;
+  }
 
   const cliente = await Cliente.findById(pagamento.clienteId);
+  console.log('[DEBUG] cliente obtido em confirmarPagamentoPorExternalId', { clienteId: cliente?._id, email: cliente?.email });
 
   await pagamentoRepository.updatePagamento(pagamento._id, {
     status: 'Aprovado',
@@ -286,6 +313,8 @@ const confirmarPagamentoPorExternalId = async (
     webhookProcessado: true
   });
 
+  console.log('[DEBUG] pagamento marcado como Aprovado', { pagamentoId });
+
   await atualizarStatusPedidos(pagamento.pedidos, 'Pendente');
 
   const notaFiscal = await gerarNotaFiscalPagamento(
@@ -294,12 +323,16 @@ const confirmarPagamentoPorExternalId = async (
     metodoPagamento
   );
 
+  console.log('[DEBUG] nota fiscal gerada', { numero: notaFiscal.numero, caminho: notaFiscal.caminho });
+
   await emailService.enviarNotaFiscal({
     para: cliente.email,
     nome: cliente.nome,
     numeroNota: notaFiscal.numero,
     caminhoPdf: notaFiscal.caminho
   });
+
+  console.log('[DEBUG] email de nota fiscal enviado');
 };
 
 /* =====================================================

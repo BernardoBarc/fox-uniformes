@@ -86,6 +86,7 @@ router.post('/pagamento/criar', async (req, res) => {
     try {
       resultado = await pagamentoService.criarPagamento({ clienteId, pedidos, valorTotal, nomeCliente })
     } catch (serviceError) {
+      console.error('Erro em pagamentoService.criarPagamento:', serviceError);
       return res.status(500).json({
         error: serviceError.message || 'Erro ao processar pagamento'
       });
