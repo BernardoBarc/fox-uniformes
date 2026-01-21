@@ -16,6 +16,7 @@ const enviarLinkPagamento = async ({
   linkPagamento,
   pixCopiaECola,
 }) => {
+  console.log('[DEBUG] Função enviarLinkPagamento chamada', { para });
   console.log('[EMAIL] Envio link pagamento:', {
     para,
     valorTotal,
