@@ -37,8 +37,30 @@ const savePagamento = async (pagamentoData) => {
     if (pagamentoData && (pagamentoData.externalId === null || pagamentoData.externalId === undefined)) {
         delete pagamentoData.externalId;
     }
+
+    // Tenta salvar; se der E11000 em externalId (índice único existente com nulls), remove externalId e tenta novamente uma vez
     const pagamento = new Pagamento(pagamentoData);
-    return pagamento.save();
+    try {
+        return await pagamento.save();
+    } catch (err) {
+        // Código de erro Mongo para duplicata
+        const isDuplicateKey = err && (err.code === 11000 || (err.message && err.message.includes('E11000')));
+        const mentionsExternalId = err && err.message && err.message.includes('externalId');
+        if (isDuplicateKey && mentionsExternalId) {
+            // Remover externalId do objeto e tentar salvar novamente
+            try {
+                if (pagamento.externalId !== undefined) delete pagamento.externalId;
+                // também remover do pagamentoData original para evitar reincidência
+                if (pagamentoData && pagamentoData.externalId !== undefined) delete pagamentoData.externalId;
+                const retryPagamento = new Pagamento(pagamentoData);
+                return await retryPagamento.save();
+            } catch (retryErr) {
+                // se falhar novamente, propaga o erro original para facilitar debug
+                throw retryErr;
+            }
+        }
+        throw err;
+    }
 };
 
 const updatePagamento = async (id, fieldsToUpdate) => {

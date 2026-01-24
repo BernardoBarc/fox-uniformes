@@ -154,11 +154,17 @@ const gerarPixParaPagamento = async (pagamentoId) => {
   console.log('[DEBUG] iniciar gerarPixParaPagamento', { pagamentoId });
   const pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
   console.log('[DEBUG] pagamento obtido para PIX', { pagamentoId, pagamento });
-  if (!pagamento) throw new Error('Pagamento não encontrado');
+  if (!pagamento) {
+    console.error('Pagamento não encontrado em gerarPixParaPagamento', { pagamentoId });
+    return { error: 'Pagamento não encontrado' };
+  }
 
   const cliente = await Cliente.findById(pagamento.clienteId);
   console.log('[DEBUG] cliente obtido para PIX', { clienteId: cliente?._id, email: cliente?.email });
-  if (!cliente) throw new Error('Cliente não encontrado');
+  if (!cliente) {
+    console.error('Cliente não encontrado em gerarPixParaPagamento', { pagamentoId });
+    return { error: 'Cliente não encontrado' };
+  }
 
   const [firstName, ...lastNameParts] = (cliente.nome || '').split(' ');
 
@@ -180,38 +186,45 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     });
   } catch (err) {
     console.error('Erro ao chamar paymentApi.create (PIX):', err?.response?.data || err);
-    throw new Error('Erro ao criar cobrança PIX: ' + (err?.response?.data?.message || err.message || String(err)));
+    // Não lançar exception; retornar erro para o controller tratar e não causar 500 genérico
+    return { error: 'Erro ao comunicar com o provedor de pagamento' };
   }
 
   // Segurança: garantir que response.body exista antes de acessar propriedades
   const payment = response?.body;
   if (!payment) {
     console.error('Resposta inesperada do paymentApi.create (sem body):', { response });
-    throw new Error('Resposta inválida do provedor de pagamento ao gerar PIX');
+    return { error: 'Resposta inválida do provedor de pagamento ao gerar PIX' };
   }
 
   const pixData = payment.point_of_interaction?.transaction_data;
 
   if (!pixData) {
     console.error('Erro: pixData não disponível na resposta do MP', { payment, response });
-    throw new Error('Não foi possível gerar dados PIX (pixData ausente)');
+    return { error: 'Não foi possível gerar dados PIX (pixData ausente)' };
   }
 
   try {
-    await pagamentoRepository.updatePagamento(pagamentoId, {
+    // Monta campos de atualização sem forçar externalId nulo
+    const updateFields = {
       metodoPagamento: 'PIX',
-      externalId: String(payment.id),
       pix: {
         qrCode: pixData.qr_code,
         copiaECola: pixData.qr_code,
         qrCodeBase64: pixData.qr_code_base64
       }
-    });
+    };
+    if (payment && payment.id !== null && payment.id !== undefined) {
+      updateFields.externalId = String(payment.id);
+    }
+
+    await pagamentoRepository.updatePagamento(pagamentoId, updateFields);
 
     console.log('[DEBUG] pagamento atualizado com dados PIX', { pagamentoId });
   } catch (err) {
     console.error('Erro ao atualizar pagamento com dados PIX:', err);
-    throw err;
+    // Em caso de erro ao persistir, retorna erro controlado para o controller
+    return { error: 'Erro interno ao salvar dados PIX' };
   }
 
   return {
