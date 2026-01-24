@@ -1,6 +1,7 @@
 import express from 'express';
 import pagamentoService from '../services/pagamentoService.js';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
+import pagamentoRepository from '../repository/pagamentoRepository.js';
 
 const router = express.Router();
 
@@ -180,6 +181,27 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
 
     console.log('=== [WEBHOOK] Detalhes do pagamento ===');
     console.log(JSON.stringify(payment, null, 2));
+
+    // Se o pagamento trouxer external_reference, salvar dados PIX se existirem
+    try {
+      const body = payment?.body || payment;
+      const externalRef = body?.external_reference;
+      const pixData = body?.point_of_interaction?.transaction_data || body?.transaction_data || body?.transaction_details?.point_of_interaction?.transaction_data;
+      if (externalRef && pixData) {
+        await pagamentoRepository.updatePagamentoByExternalId(externalRef, {
+          externalId: String(body.id || body?.payment_id || body?.id),
+          metodoPagamento: 'PIX',
+          pix: {
+            qrCode: pixData.qr_code,
+            copiaECola: pixData.qr_code,
+            qrCodeBase64: pixData.qr_code_base64
+          }
+        });
+        console.log('[WEBHOOK] Dados PIX salvos no pagamento', { externalRef });
+      }
+    } catch (e) {
+      console.warn('[WEBHOOK] Falha ao salvar dados PIX no pagamento:', e?.message || e);
+    }
 
     // 🔐 Validação crítica
     if (!payment.external_reference) {
