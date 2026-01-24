@@ -188,7 +188,7 @@ router.post('/webhook/mercadopago', express.json(), async (req, res) => {
       const externalRef = body?.external_reference;
       const pixData = body?.point_of_interaction?.transaction_data || body?.transaction_data || body?.transaction_details?.point_of_interaction?.transaction_data;
       if (externalRef && pixData) {
-        await pagamentoRepository.updatePagamentoByExternalId(externalRef, {
+        await pagamentoRepository.updatePagamento(externalRef, {
           externalId: String(body.id || body?.payment_id || body?.id),
           metodoPagamento: 'PIX',
           pix: {
