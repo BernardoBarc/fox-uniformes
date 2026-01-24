@@ -9,7 +9,8 @@ import {
 
 import emailService from './emailService.js';
 
-import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
+import { MercadoPagoConfig, Preference, Payment } from 'mercadopago'
+import QRCode from 'qrcode';
 
 /* =====================================================
    CONFIGURAÇÕES
@@ -234,6 +235,19 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     }
   }
 
+  // Se ainda sem pixData, tentar buscar detalhes do pagamento pelo ID retornado
+  if (!pixData && payment && payment.id) {
+    try {
+      console.log('[DEBUG] tentando paymentApi.get por id para obter pixData', { paymentId: payment.id });
+      const detailsResp = await paymentApi.get({ id: payment.id });
+      payment = detailsResp?.body || payment;
+      pixData = extractPixData(payment);
+      console.log('[DEBUG] paymentApi.get tentou obter pixData:', { pixDataPresent: !!pixData });
+    } catch (getErr) {
+      console.warn('Falha ao buscar detalhes do pagamento por id:', getErr?.response?.data || getErr);
+    }
+  }
+
   // Caso ainda não tenha pixData, verificar se o objeto payment possui campos diretos de qr
   if (!pixData && payment) {
     // Algumas respostas podem vir com qr_code direto
@@ -242,6 +256,17 @@ const gerarPixParaPagamento = async (pagamentoId) => {
         qr_code: payment.qr_code || payment.qr_code,
         qr_code_base64: payment.qr_code_base64 || payment.qr_code_base64
       };
+    }
+  }
+
+  // Gerar qrCodeBase64 localmente caso o provedor tenha retornado somente o copiaecola (qr_code)
+  if (pixData && pixData.qr_code && !pixData.qr_code_base64) {
+    try {
+      const dataUrl = await QRCode.toDataURL(pixData.qr_code);
+      pixData.qr_code_base64 = dataUrl.split(',')[1];
+      console.log('[DEBUG] gerado qrCodeBase64 localmente');
+    } catch (qrErr) {
+      console.warn('Não foi possível gerar qrCodeBase64 localmente:', qrErr);
     }
   }
 
