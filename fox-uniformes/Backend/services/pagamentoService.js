@@ -159,6 +159,15 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     return { error: 'Pagamento não encontrado' };
   }
 
+  // Se já temos dados PIX gravados, retorna imediatamente (fallback)
+  if (pagamento.pix && (pagamento.pix.copiaECola || pagamento.pix.qrCodeBase64)) {
+    console.log('[DEBUG] usando dados PIX já presentes no pagamento', { pagamentoId });
+    return {
+      copiaECola: pagamento.pix.copiaECola,
+      qrCodeBase64: pagamento.pix.qrCodeBase64
+    };
+  }
+
   const cliente = await Cliente.findById(pagamento.clienteId);
   console.log('[DEBUG] cliente obtido para PIX', { clienteId: cliente?._id, email: cliente?.email });
   if (!cliente) {
@@ -186,21 +195,67 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     });
   } catch (err) {
     console.error('Erro ao chamar paymentApi.create (PIX):', err?.response?.data || err);
-    // Não lançar exception; retornar erro para o controller tratar e não causar 500 genérico
-    return { error: 'Erro ao comunicar com o provedor de pagamento' };
+    // Tentar fallback: se já existirem dados no pagamento, retornar; senão, tentar novo retry abaixo
   }
 
-  // Segurança: garantir que response.body exista antes de acessar propriedades
-  const payment = response?.body;
-  if (!payment) {
-    console.error('Resposta inesperada do paymentApi.create (sem body):', { response });
-    return { error: 'Resposta inválida do provedor de pagamento ao gerar PIX' };
+  let payment = response?.body;
+
+  // Função auxiliar para extrair pixData de várias possíveis localizações
+  const extractPixData = (p) => {
+    if (!p) return null;
+    return p.point_of_interaction?.transaction_data || p.transaction_data || p.transaction_details?.point_of_interaction?.transaction_data || null;
+  };
+
+  let pixData = extractPixData(payment);
+
+  // Se não obteve pixData, tentar um retry rápido (uma tentativa)
+  if (!pixData) {
+    try {
+      console.log('[DEBUG] pixData ausente, tentando retry paymentApi.create (uma vez)');
+      const retryResp = await paymentApi.create({
+        body: {
+          transaction_amount: Number(pagamento.valorTotal),
+          payment_method_id: 'pix',
+          description: `Pedido ${pagamentoId}`,
+          payer: {
+            email: cliente.email,
+            first_name: firstName,
+            last_name: lastNameParts.join(' ') || 'Cliente'
+          },
+          external_reference: pagamentoId,
+          notification_url: `${BACKEND_URL}/webhook/mercadopago`
+        }
+      });
+      payment = retryResp?.body;
+      pixData = extractPixData(payment);
+      console.log('[DEBUG] retry response:', { paymentPresent: !!payment, pixDataPresent: !!pixData });
+    } catch (retryErr) {
+      console.error('Retry falhou ao chamar paymentApi.create (PIX):', retryErr?.response?.data || retryErr);
+    }
   }
 
-  const pixData = payment.point_of_interaction?.transaction_data;
+  // Caso ainda não tenha pixData, verificar se o objeto payment possui campos diretos de qr
+  if (!pixData && payment) {
+    // Algumas respostas podem vir com qr_code direto
+    if (payment.qr_code || payment.qr_code_base64) {
+      pixData = {
+        qr_code: payment.qr_code || payment.qr_code,
+        qr_code_base64: payment.qr_code_base64 || payment.qr_code_base64
+      };
+    }
+  }
+
+  // Se ainda sem pixData, e se o pagamento agora contém algo nos campos gateway salvos, usar como fallback
+  if (!pixData && pagamento.pix && pagamento.pix.copiaECola) {
+    console.log('[DEBUG] retorno usando copiaECola já salva no pagamento como fallback');
+    return {
+      copiaECola: pagamento.pix.copiaECola,
+      qrCodeBase64: pagamento.pix.qrCodeBase64
+    };
+  }
 
   if (!pixData) {
-    console.error('Erro: pixData não disponível na resposta do MP', { payment, response });
+    console.error('Erro: pixData não disponível na resposta do MP depois de tentativas', { payment });
     return { error: 'Não foi possível gerar dados PIX (pixData ausente)' };
   }
 
@@ -223,7 +278,6 @@ const gerarPixParaPagamento = async (pagamentoId) => {
     console.log('[DEBUG] pagamento atualizado com dados PIX', { pagamentoId });
   } catch (err) {
     console.error('Erro ao atualizar pagamento com dados PIX:', err);
-    // Em caso de erro ao persistir, retorna erro controlado para o controller
     return { error: 'Erro interno ao salvar dados PIX' };
   }
 
