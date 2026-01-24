@@ -72,6 +72,20 @@ export default function PagamentoPage() {
 
   const mpInstance = useRef<any>(null);
 
+  // Overlay de loading global para indicar processamento de pagamento
+  const loadingMessage = processando
+    ? (metodoPagamento === 'CREDIT_CARD' ? 'Processando pagamento com cartão...' : 'Processando pagamento...')
+    : null;
+
+  const LoadingOverlay = processando ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-gray-800 p-6 rounded-lg flex flex-col items-center gap-4">
+        <div className="animate-spin h-8 w-8 border-4 border-white rounded-full border-t-transparent"></div>
+        <div className="text-white font-medium">{loadingMessage}</div>
+      </div>
+    </div>
+  ) : null;
+
   /* ================= BUSCAR PAGAMENTO ================= */
   useEffect(() => {
     const fetchPagamento = async () => {
@@ -259,6 +273,7 @@ export default function PagamentoPage() {
   if (pagamento.status === "Aprovado") {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        {LoadingOverlay}
         <div className="bg-gray-800 p-8 rounded-xl text-center">
           <h1 className="text-2xl font-bold text-green-500">
             Pagamento Confirmado!
@@ -274,11 +289,13 @@ export default function PagamentoPage() {
   if (pixData && aguardandoConfirmacao) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        {LoadingOverlay}
         <div className="bg-gray-800 p-8 rounded-xl text-center">
           <h1 className="text-xl text-green-500 mb-4">Pague com PIX</h1>
           <img
             src={`data:image/png;base64,${pixData.qrCodeBase64}`}
-            className="mx-auto mb-4"
+            className="mx-auto mb-4 w-48 h-48 object-contain"
+            alt="QR Pix"
           />
           <div className="bg-gray-700 p-2 rounded text-sm break-all">
             {pixData.copiaECola}
@@ -293,6 +310,7 @@ export default function PagamentoPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
+      {LoadingOverlay}
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">

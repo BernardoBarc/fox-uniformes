@@ -68,10 +68,28 @@ export const gerarNotaFiscal = async (dadosNota) => {
       doc.pipe(stream);
 
       /* ================= LOGO E DADOS EMPRESA ================= */
-      const logoPath = path.join(__dirname, '..', 'public', 'logoPreto.png');
-      if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, doc.page.width / 2 - 50, 30, { width: 100 });
-        doc.moveDown(2);
+      // Tenta localizar o logo na pasta public do projeto raiz (../../public) first,
+      // e como fallback tenta a pasta public dentro do Backend (../public).
+      const possibleLogoPaths = [
+        path.join(__dirname, '..', '..', 'public', 'logoPreto.png'), // raiz/public/logoPreto.png
+        path.join(__dirname, '..', 'public', 'logoPreto.png') // Backend/public/logoPreto.png
+      ];
+
+      let logoFound = null;
+      for (const p of possibleLogoPaths) {
+        if (fs.existsSync(p)) {
+          logoFound = p;
+          break;
+        }
+      }
+
+      if (logoFound) {
+        try {
+          doc.image(logoFound, doc.page.width / 2 - 50, 30, { width: 100 });
+          doc.moveDown(2);
+        } catch (imgErr) {
+          console.warn('Não foi possível inserir logo na nota fiscal:', imgErr);
+        }
       }
       doc.fontSize(14).fillColor('#000').font('Helvetica-Bold').text('FOX UNIFORMES', { align: 'center' });
       doc.fontSize(10).fillColor('#000').font('Helvetica').text('Uniformes de Qualidade', { align: 'center' });
@@ -85,7 +103,8 @@ export const gerarNotaFiscal = async (dadosNota) => {
       doc.fontSize(16).fillColor('#000').font('Helvetica-Bold').text('NOTA FISCAL', { align: 'center' });
       doc.fontSize(12).fillColor('#000').font('Helvetica-Bold').text(`Nº ${numeroNota}`, { align: 'center' });
       doc.moveDown(1);
-      const dataFormatada = new Date(dataEmissao).toLocaleString('pt-BR');
+      // Formata a data no fuso de São Paulo para evitar discrepância (ex.: +3 horas)
+      const dataFormatada = new Date(dataEmissao).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
       doc.fontSize(10).fillColor('#000').font('Helvetica').text(`Data de Emissão: ${dataFormatada}`, { align: 'right' });
       doc.moveDown(0.5);
       doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).stroke();
