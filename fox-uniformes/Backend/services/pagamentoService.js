@@ -160,46 +160,59 @@ const gerarPixParaPagamento = async (pagamentoId) => {
   console.log('[DEBUG] cliente obtido para PIX', { clienteId: cliente?._id, email: cliente?.email });
   if (!cliente) throw new Error('Cliente não encontrado');
 
-  const [firstName, ...lastNameParts] = cliente.nome.split(' ');
+  const [firstName, ...lastNameParts] = (cliente.nome || '').split(' ');
 
-  const response = await paymentApi.create({
-    body: {
-      transaction_amount: Number(pagamento.valorTotal),
-      payment_method_id: 'pix',
-      description: `Pedido ${pagamentoId}`,
-      payer: {
-        email: cliente.email,
-        first_name: firstName,
-        last_name: lastNameParts.join(' ') || 'Cliente'
-      },
-      external_reference: pagamentoId,
-      notification_url: `${BACKEND_URL}/webhook/mercadopago`
-    }
-  });
-
-  console.log('[DEBUG] resposta paymentApi.create (PIX)', { status: response.status, bodyKeys: Object.keys(response.body || {}) });
-
-  const payment = response.body;
-
-  const pixData =
-    payment.point_of_interaction?.transaction_data;
-
-  if (!pixData) {
-    console.error('Erro: pixData não disponível na resposta do MP', { payment });
-    throw new Error('Não foi possível gerar dados PIX');
+  let response;
+  try {
+    response = await paymentApi.create({
+      body: {
+        transaction_amount: Number(pagamento.valorTotal),
+        payment_method_id: 'pix',
+        description: `Pedido ${pagamentoId}`,
+        payer: {
+          email: cliente.email,
+          first_name: firstName,
+          last_name: lastNameParts.join(' ') || 'Cliente'
+        },
+        external_reference: pagamentoId,
+        notification_url: `${BACKEND_URL}/webhook/mercadopago`
+      }
+    });
+  } catch (err) {
+    console.error('Erro ao chamar paymentApi.create (PIX):', err?.response?.data || err);
+    throw new Error('Erro ao criar cobrança PIX: ' + (err?.response?.data?.message || err.message || String(err)));
   }
 
-  await pagamentoRepository.updatePagamento(pagamentoId, {
-    metodoPagamento: 'PIX',
-    externalId: String(payment.id),
-    pix: {
-      qrCode: pixData.qr_code,
-      copiaECola: pixData.qr_code,
-      qrCodeBase64: pixData.qr_code_base64
-    }
-  });
+  // Segurança: garantir que response.body exista antes de acessar propriedades
+  const payment = response?.body;
+  if (!payment) {
+    console.error('Resposta inesperada do paymentApi.create (sem body):', { response });
+    throw new Error('Resposta inválida do provedor de pagamento ao gerar PIX');
+  }
 
-  console.log('[DEBUG] pagamento atualizado com dados PIX', { pagamentoId });
+  const pixData = payment.point_of_interaction?.transaction_data;
+
+  if (!pixData) {
+    console.error('Erro: pixData não disponível na resposta do MP', { payment, response });
+    throw new Error('Não foi possível gerar dados PIX (pixData ausente)');
+  }
+
+  try {
+    await pagamentoRepository.updatePagamento(pagamentoId, {
+      metodoPagamento: 'PIX',
+      externalId: String(payment.id),
+      pix: {
+        qrCode: pixData.qr_code,
+        copiaECola: pixData.qr_code,
+        qrCodeBase64: pixData.qr_code_base64
+      }
+    });
+
+    console.log('[DEBUG] pagamento atualizado com dados PIX', { pagamentoId });
+  } catch (err) {
+    console.error('Erro ao atualizar pagamento com dados PIX:', err);
+    throw err;
+  }
 
   return {
     copiaECola: pixData.qr_code,
