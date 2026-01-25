@@ -318,17 +318,17 @@ const gerarPixParaPagamento = async (pagamentoId) => {
 
 const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
   const pagamento = await pagamentoRepository.getPagamentoById(pagamentoId);
-  if (!pagamento) throw new Error('Pagamento não encontrado');
+  if (!pagamento) return { sucesso: false, error: 'Pagamento não encontrado' };
 
   const cliente = await Cliente.findById(pagamento.clienteId);
-  if (!cliente) throw new Error('Cliente não encontrado');
+  if (!cliente) return { sucesso: false, error: 'Cliente não encontrado' };
 
   if (!validarCPF(dadosCartao.cpf)) {
-    throw new Error('CPF inválido');
+    return { sucesso: false, error: 'CPF inválido' };
   }
 
   if (!dadosCartao.paymentMethodId) {
-    throw new Error('Bandeira do cartão não identificada');
+    return { sucesso: false, error: 'Bandeira do cartão não identificada' };
   }
 
 
@@ -382,9 +382,33 @@ const processarPagamentoCartao = async (pagamentoId, dadosCartao) => {
       error?.response?.data || error
     );
 
+    const mpErr = error?.response?.data || null;
+    let message = 'Erro ao processar pagamento';
+
+    try {
+      if (mpErr) {
+        if (Array.isArray(mpErr.cause) && mpErr.cause[0]?.description) {
+          message = mpErr.cause[0].description;
+        } else if (mpErr.message) {
+          message = mpErr.message;
+        } else if (mpErr.status_detail) {
+          message = mpErr.status_detail;
+        } else if (mpErr.error) {
+          message = mpErr.error;
+        } else if (mpErr.title) {
+          message = mpErr.title;
+        }
+      } else if (error?.message) {
+        message = error.message;
+      }
+    } catch (e) {
+      // fallback keeps generic message
+    }
+
     return {
-      sucesso: true,
-      status: 'processing'
+      sucesso: false,
+      error: message,
+      details: mpErr
     };
   }
 };
@@ -435,7 +459,7 @@ const confirmarPagamentoPorExternalId = async (
     nome: cliente.nome,
     numeroNota: notaFiscal.numero,
     caminhoPdf: notaFiscal.caminho,
-    linkAcompanhamento: `${FRONTEND_URL}/acompanhamento/${pagamento._id}`
+    linkAcompanhamento: `${FRONTEND_URL}/acompanhar/`
   });
 
   console.log('[DEBUG] email de nota fiscal enviado');

@@ -73,11 +73,12 @@ export default function PagamentoPage() {
   const mpInstance = useRef<any>(null);
 
   // Overlay de loading global para indicar processamento de pagamento
-  const loadingMessage = processando
+  // Mantém o overlay enquanto processando ou aguardando confirmação via webhook
+  const loadingMessage = (processando || aguardandoConfirmacao)
     ? (metodoPagamento === 'CREDIT_CARD' ? 'Processando pagamento com cartão...' : 'Processando pagamento...')
     : null;
 
-  const LoadingOverlay = processando ? (
+  const LoadingOverlay = (processando || aguardandoConfirmacao) ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-gray-800 p-6 rounded-lg flex flex-col items-center gap-4">
         <div className="animate-spin h-8 w-8 border-4 border-white rounded-full border-t-transparent"></div>
@@ -160,10 +161,56 @@ export default function PagamentoPage() {
           throw new Error("Mercado Pago não inicializado");
         }
 
-        const [mes, ano] = cardForm.cardExpiration.split("/");
+        // Validações básicas dos campos do cartão (mensagens por campo)
+        const luhnValid = (num: string) => {
+          const s = num.replace(/\D/g, '');
+          let sum = 0;
+          let shouldDouble = false;
+          for (let i = s.length - 1; i >= 0; i--) {
+            let digit = parseInt(s.charAt(i), 10);
+            if (shouldDouble) {
+              digit *= 2;
+              if (digit > 9) digit -= 9;
+            }
+            sum += digit;
+            shouldDouble = !shouldDouble;
+          }
+          return sum % 10 === 0;
+        };
 
-        if (!mes || !ano) {
-          throw new Error("Validade do cartão inválida");
+        const cardNumberClean = cardForm.cardNumber.replace(/\s/g, '');
+        if (!cardNumberClean || !luhnValid(cardNumberClean)) {
+          setCardError('Número do cartão inválido');
+          setProcessando(false);
+          return;
+        }
+
+        const expirationParts = cardForm.cardExpiration.split('/');
+        const mes = expirationParts[0];
+        const ano = expirationParts[1];
+        if (!mes || !ano || Number(mes) < 1 || Number(mes) > 12 || ano.length !== 2) {
+          setCardError('Data de validade inválida (MM/AA)');
+          setProcessando(false);
+          return;
+        }
+
+        if (!/^[0-9]{3,4}$/.test(cardForm.cardCvv)) {
+          setCardError('CVV inválido');
+          setProcessando(false);
+          return;
+        }
+
+        const cpfDigits = cardForm.docNumber.replace(/\D/g, '');
+        if (!cpfDigits || cpfDigits.length !== 11) {
+          setCardError('CPF inválido');
+          setProcessando(false);
+          return;
+        }
+
+        if (!cardForm.email || !cardForm.email.includes('@')) {
+          setCardError('E-mail inválido');
+          setProcessando(false);
+          return;
         }
 
         const tokenResponse = await mpInstance.current.createCardToken({
@@ -177,7 +224,9 @@ export default function PagamentoPage() {
         });
 
         if (!tokenResponse?.id) {
-          throw new Error("Erro ao gerar token do cartão");
+          setCardError('Erro ao gerar token do cartão');
+          setProcessando(false);
+          return;
         }
 
         /* ===== IDENTIFICAR BANDEIRA (VISA / MASTERCARD) ===== */
@@ -219,18 +268,28 @@ export default function PagamentoPage() {
           }
         );
 
-      const data = await res.json();
+        // Lê resposta do backend e mostra mensagem específica em caso de erro
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setCardError(err.error || 'Erro ao processar pagamento');
+          setProcessando(false);
+          return;
+        }
 
-      if (!data?.sucesso) {
-        throw new Error("Erro ao processar pagamento");
-      }
+        const data = await res.json();
+        if (!data?.sucesso) {
+          setCardError(data.error || 'Erro ao processar pagamento');
+          setProcessando(false);
+          return;
+        }
 
-      setAguardandoConfirmacao(true);
+        // Aguarda confirmação via webhook (mantém overlay)
+        setAguardandoConfirmacao(true);
       }
     } catch (err) {
       console.error(err);
-      setCardError("Erro ao processar pagamento.");
-    } finally {
+      // normaliza erro para evitar problemas de tipagem no TypeScript
+      setCardError((err as any)?.message || 'Erro ao processar pagamento.');
       setProcessando(false);
     }
   };
@@ -249,6 +308,12 @@ export default function PagamentoPage() {
       if (data.status === "Aprovado") {
         setPixData(null);
         setAguardandoConfirmacao(false);
+        setProcessando(false);
+      } else if (data.status && data.status !== 'Pendente') {
+        // pagamento finalizado com outro status (rejeitado/cancelado)
+        setAguardandoConfirmacao(false);
+        setProcessando(false);
+        setCardError(`Pagamento finalizado com status: ${data.status}`);
       }
     }, 4000);
 

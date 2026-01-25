@@ -7,14 +7,17 @@ const clienteSchema = new mongoose.Schema({
     },
     cpf: {
         type: String,
+        unique: true,
         required: true,
     },
     email: {
         type: String,
+        unique: true,
         required: false,
     },
     telefone: {
         type: String,
+        unique: true,
         required: true,
     },
     cidade: {

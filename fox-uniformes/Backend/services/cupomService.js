@@ -30,16 +30,6 @@ const notificarClientesSobreCupom = async (cupom) => {
         let erros = 0;
 
         for (const cliente of clientes) {
-            // Envio WhatsApp
-            if (cliente.telefone) {
-                const resultado = await enviarWhatsApp(cliente.telefone, mensagem);
-                if (resultado.success) {
-                    enviados++;
-                } else {
-                    erros++;
-                }
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
             // Envio E-mail
             if (cliente.email) {
                 try {

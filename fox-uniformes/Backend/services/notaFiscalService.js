@@ -68,11 +68,15 @@ export const gerarNotaFiscal = async (dadosNota) => {
       doc.pipe(stream);
 
       /* ================= LOGO E DADOS EMPRESA ================= */
-      // Tenta localizar o logo na pasta public do projeto raiz (../../public) first,
-      // e como fallback tenta a pasta public dentro do Backend (../public).
+      // Tenta localizar o logo - procura por versões claras/escuro na pasta public
+      // Prioriza caminho com base na raiz do processo (deploys) e depois caminhos relativos
       const possibleLogoPaths = [
+        path.join(process.cwd(), 'public', 'logoPreto.png'),
+        path.join(process.cwd(), 'public', 'logoBranco.png'),
         path.join(__dirname, '..', '..', 'public', 'logoPreto.png'), // raiz/public/logoPreto.png
-        path.join(__dirname, '..', 'public', 'logoPreto.png') // Backend/public/logoPreto.png
+        path.join(__dirname, '..', '..', 'public', 'logoBranco.png'),
+        path.join(__dirname, '..', 'public', 'logoPreto.png'), // Backend/public/logoPreto.png
+        path.join(__dirname, '..', 'public', 'logoBranco.png'),
       ];
 
       let logoFound = null;
@@ -85,12 +89,18 @@ export const gerarNotaFiscal = async (dadosNota) => {
 
       if (logoFound) {
         try {
-          doc.image(logoFound, doc.page.width / 2 - 50, 30, { width: 100 });
-          doc.moveDown(2);
+          // Lê imagem como buffer (mais confiável em ambientes onde paths podem variar)
+          const imgBuffer = fs.readFileSync(logoFound);
+          doc.image(imgBuffer, 50, 30, { width: 100 });
+          doc.moveDown(4);
+          console.log('[DEBUG] logo da nota fiscal inserida (buffer):', logoFound);
         } catch (imgErr) {
-          console.warn('Não foi possível inserir logo na nota fiscal:', imgErr);
+          console.warn('Não foi possível inserir logo na nota fiscal (buffer):', imgErr);
         }
+      } else {
+        console.warn('Logo não encontrada em paths esperados:', possibleLogoPaths);
       }
+
       doc.fontSize(14).fillColor('#000').font('Helvetica-Bold').text('FOX UNIFORMES', { align: 'center' });
       doc.fontSize(10).fillColor('#000').font('Helvetica').text('Uniformes de Qualidade', { align: 'center' });
       doc.fontSize(10).fillColor('#000').font('Helvetica').text('CNPJ: 99.999.999/9999-99', { align: 'center' });
