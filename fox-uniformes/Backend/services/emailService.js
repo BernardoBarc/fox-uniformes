@@ -193,7 +193,8 @@ const enviarCupom = async ({
   codigoCupom,
   valorCupom,
   validadeCupom,
-  linkCompra
+  linkCompra,
+  desconto = 0
 }) => {
   console.log('[EMAIL] Envio cupom:', {
     para,
@@ -212,11 +213,11 @@ const enviarCupom = async ({
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
       <h2>Olá, ${nome} 👋</h2>
 
-      <p>Você recebeu um <strong>CUPOM DE DESCONTO</strong> para usar na Fox Uniformes!</p>
+      <p>Você recebeu um <strong>CUPOM DE DESCONTO de ${desconto}%</strong> para usar na Fox Uniformes!</p>
 
       <p><strong>Código do Cupom:</strong> <span style="background:#f4f4f4;padding:4px 8px;border-radius:4px;font-weight:bold;">${codigoCupom}</span></p>
-      <p><strong>Valor:</strong> R$ ${valorCupom.toFixed(2)}</p>
-      <p><strong>Validade:</strong> ${validadeCupom}</p>
+      <p><strong>Valor mínimo para ativação:</strong> R$ ${valorCupom.toFixed(2)}</p>
+      <p><strong>Válido até:</strong> ${validadeCupom}</p>
 
       ${
         linkCompra

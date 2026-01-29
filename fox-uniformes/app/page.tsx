@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "./config/api";
+import Button from "./components/Button";
 
 export default function loginPage() {
   const router = useRouter();
@@ -86,38 +87,63 @@ export default function loginPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground transition-colors duration-300">
-      <div className="w-full max-w-md p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-neutral-900 flex flex-col items-center gap-8">
-        <img src="/logoPreto.png" alt="Logo" className="h-14 mb-2 dark:hidden" />
-        <img src="/logoBranco.png" alt="Logo" className="h-14 mb-2 hidden dark:block" />
-        <form onSubmit={handleLogin} className="flex flex-col gap-4 w-full">
-          <input
-            type="text"
-            placeholder="Login"
-            value={login}
-            onChange={(e) => setLogin(e.target.value)}
-            className="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-neutral-800 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-            autoComplete="username"
-          />
-          <input
-            type="password"
-            placeholder="Senha"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-neutral-800 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-            autoComplete="current-password"
-          />
-          <button
-            type="submit"
-            className="bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-bold p-3 rounded-lg hover:opacity-90 transition-colors"
-            disabled={isAuthenticated}
-          >
-            Entrar
-          </button>
-          {error && <p className="text-red-500 text-sm text-center mt-2">{error}</p>}
-        </form>
-        <a href="/Esqueci-senha" className="text-blue-500 dark:text-blue-400 hover:underline text-sm mt-2">Esqueci minha senha</a>
+    <main className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      <div className="decoration-wrap" aria-hidden>
+        <div className="shape shape-1" />
+        <div className="shape shape-2" />
+        <div className="shape shape-3" />
       </div>
+
+      <div className="container-responsive hero-grid">
+        <div className="flex flex-col gap-6">
+          <div className="kv-accent text-4xl font-extrabold">Fox Uniformes</div>
+          <p className="kv-muted max-w-lg">Painel administrativo seguro para gerenciar pedidos, clientes e rotas. Acesse suas cobranças e notas de forma rápida.</p>
+
+          <div className="mt-6 flex gap-3">
+            {/* botões removidos conforme solicitado */}
+          </div>
+        </div>
+
+        <div className="login-card" role="region" aria-label="Formulário de login">
+          <div className="flex flex-col items-center mb-4">
+            <img src="/logoAmarelo.png" alt="Fox Uniformes" className="w-16 h-16 rounded-full object-cover" onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { const img = e.currentTarget as HTMLImageElement; if (!img.getAttribute('data-fallback')) { img.setAttribute('data-fallback', '1'); img.src = '/logoBranco.png'; } }} />
+            <div className="text-sm kv-muted mt-2">Painel Administrativo</div>
+          </div>
+
+          <form onSubmit={handleLogin} className="flex flex-col gap-4 w-full">
+            <input
+              type="text"
+              placeholder="Login"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              className="input-gold"
+              autoComplete="username"
+            />
+            <input
+              type="password"
+              placeholder="Senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input-gold"
+              autoComplete="current-password"
+            />
+            <Button
+              type="submit"
+              variant="gold"
+              className="w-full"
+              disabled={isAuthenticated}
+            >
+              Entrar
+            </Button>
+            {error && <p className="text-red-400 text-sm text-center mt-2">{error}</p>}
+          </form>
+
+          <div className="mt-4 text-center">
+            <a href="/Esqueci-senha" className="text-sm kv-muted hover:underline">Esqueci minha senha</a>
+          </div>
+        </div>
+      </div>
+
     </main>
   );
 }

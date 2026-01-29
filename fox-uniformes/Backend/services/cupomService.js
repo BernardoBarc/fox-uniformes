@@ -24,7 +24,7 @@ const criarCupom = async (cupomData, notificarClientes = true) => {
 const notificarClientesSobreCupom = async (cupom) => {
     try {
         const clientes = await clienteRepository.getAllClientes();
-        const mensagem = `🎉 *FOX UNIFORMES - CUPOM DE DESCONTO!* 🎉\n\nTemos uma oferta especial para você!\n\n🏷️ *Cupom:* ${cupom.codigo}\n💰 *Desconto:* ${cupom.desconto}%\n${cupom.valorMinimo > 0 ? `📦 *Valor mínimo:* R$ ${cupom.valorMinimo.toFixed(2)}` : ''}\n${cupom.dataValidade ? `📅 *Válido até:* ${new Date(cupom.dataValidade).toLocaleDateString('pt-BR')}` : '✅ *Sem data de validade*'}\n\nAproveite esta oportunidade! 🛍️\n\n_Fox Uniformes - Qualidade que você veste!_`;
+        const mensagem = `🎉 *FOX UNIFORMES - CUPOM DE DESCONTO!* 🎉\n\nTemos uma oferta especial para você!\n\n🏷️ *Cupom:* ${cupom.codigo}\n💰 *Desconto:* ${cupom.desconto}%\n${cupom.valorMinimo > 0 ? `📦 *Valor mínimo:* R$ ${cupom.valorMinimo.toFixed(2)}` : ''}\n${cupom.dataValidade ? `📅 *Válido até:* ${new Date(cupom.dataValidade).toLocaleDateString('pt-BR')}` : '✅ *Sem data de validade*'}\n\nAproveite esta oportunidade! 🛍️\n\n_Fox Uniformes - Qualidade que você veste!`;
 
         let enviados = 0;
         let erros = 0;
@@ -37,7 +37,8 @@ const notificarClientesSobreCupom = async (cupom) => {
                         para: cliente.email,
                         nome: cliente.nome || cliente.razaoSocial || 'Cliente',
                         codigoCupom: cupom.codigo,
-                        valorCupom: cupom.valorDesconto || 0,
+                        valorCupom: cupom.valorMinimo || 0,
+                        desconto: cupom.desconto || 0,
                         validadeCupom: cupom.dataValidade ? new Date(cupom.dataValidade).toLocaleDateString('pt-BR') : 'Sem data de validade',
                         linkCompra: cupom.linkCompra || '',
                     });
@@ -77,7 +78,7 @@ const getCupomByCodigo = async (codigo) => {
 };
 
 // Validar cupom para uso
-const validarCupom = async (codigo, valorPedido) => {
+const validarCupom = async (codigo, valorPedido, clienteId = null) => {
     const cupom = await cupomRepository.findByCodigo(codigo);
     
     if (!cupom) {
@@ -88,7 +89,7 @@ const validarCupom = async (codigo, valorPedido) => {
         };
     }
 
-    const validacao = cupom.isValido(valorPedido);
+    const validacao = cupom.isValido(valorPedido, clienteId);
     
     if (!validacao.valido) {
         return {
@@ -109,14 +110,15 @@ const validarCupom = async (codigo, valorPedido) => {
             codigo: cupom.codigo,
             desconto: cupom.desconto,
             valorDesconto: valorDesconto,
-            valorFinal: valorFinal
+            valorFinal: valorFinal,
+            valorMinimo: cupom.valorMinimo || 0
         }
     };
 };
 
 // Aplicar cupom (incrementar uso)
-const aplicarCupom = async (cupomId) => {
-    return await cupomRepository.incrementarUso(cupomId);
+const aplicarCupom = async (cupomId, clienteId = null) => {
+    return await cupomRepository.incrementarUso(cupomId, clienteId);
 };
 
 // Atualizar cupom

@@ -28,12 +28,18 @@ const cupomSchema = new mongoose.Schema({
     },
     usoMaximo: {
         type: Number,
-        default: null // null = uso ilimitado
+        default: null // null = uso ilimitado (interpreted as per-client limit)
     },
     vezesUsado: {
         type: Number,
         default: 0
     },
+    usosPorCliente: [
+        {
+            cliente: { type: mongoose.Schema.Types.ObjectId, ref: 'Cliente' },
+            usos: { type: Number, default: 0 }
+        }
+    ],
     criadoPor: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
@@ -44,7 +50,8 @@ const cupomSchema = new mongoose.Schema({
 });
 
 // Método para verificar se o cupom está válido
-cupomSchema.methods.isValido = function(valorPedido = 0) {
+// Agora isValido aceita opcionalmente o id do cliente para validação por cliente
+cupomSchema.methods.isValido = function(valorPedido = 0, clienteId = null) {
     // Verificar se está ativo
     if (!this.ativo) {
         return { valido: false, mensagem: "Este cupom está desativado" };
@@ -55,11 +62,15 @@ cupomSchema.methods.isValido = function(valorPedido = 0) {
         return { valido: false, mensagem: "Este cupom expirou" };
     }
     
-    // Verificar uso máximo
-    if (this.usoMaximo !== null && this.vezesUsado >= this.usoMaximo) {
-        return { valido: false, mensagem: "Este cupom atingiu o limite de uso" };
+    // Verificar uso máximo POR CLIENTE (se definido)
+    if (this.usoMaximo !== null && clienteId) {
+        const entry = (this.usosPorCliente || []).find(u => String(u.cliente) === String(clienteId));
+        const usados = entry ? entry.usos : 0;
+        if (usados >= this.usoMaximo) {
+            return { valido: false, mensagem: "Você já atingiu o limite de uso deste cupom" };
+        }
     }
-    
+     
     // Verificar valor mínimo
     if (valorPedido < this.valorMinimo) {
         return { 

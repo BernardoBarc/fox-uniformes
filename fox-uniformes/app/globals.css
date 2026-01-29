@@ -1,26 +1,166 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Paleta recomendada para uniformes: profissional, confiável e com toque premium */
+  --bg: #020203;         /* preto profundo */
+  --card: #0b0b0d;       /* cartão ligeiramente mais claro */
+  --text: #F5F3EE;       /* off-white quente para textos */
+  --muted: #BFB8A0;      /* dourado acinzentado para textos secundários */
+  --accent: #C9A33B;     /* dourado primário para destaques */
+  --accent-2: #8B6B2F;   /* dourado escurecido para gradientes */
+  --accent-cta: #0FB3A3; /* teal complementar para CTAs e links (contraste e modernidade) */
+  --glass: rgba(255,255,255,0.03);
+  --radius: 12px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--text); /* off-white com leve tom quente */
+  font-family: var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  margin: 0;
+  background-image: radial-gradient(rgba(212,175,55,0.02) 0.5px, transparent 0.5px);
+  background-size: 60px 60px; /* leve textura pontilhada muito discreta */
 }
+
+/* Conteiner central com espaçamento responsivo */
+.container-responsive {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Cartões mais suaves */
+.card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+}
+
+/* Tipografia responsiva */
+h1, h2, h3 {
+  line-height: 1.1;
+}
+
+@media (max-width: 640px) {
+  html { font-size: 15px; }
+}
+@media (max-width: 420px) {
+  html { font-size: 14px; }
+}
+
+/* Preferência de tema escuro forçada: removemos a sobrescrita por prefers-color-scheme
+   para garantir que o design preto + dourado seja exibido tanto em dispositivos com
+   tema claro quanto escuro. */
+
+/* Helpers */
+.kv-muted { color: var(--muted); }
+.kv-accent { color: var(--accent); }
+.button-primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #080808;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: none;
+}
+.btn-gold {
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  color: #080808;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: none;
+  font-weight: 700;
+}
+.btn-ghost {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  color: var(--muted);
+}
+.btn-cta {
+  background: linear-gradient(90deg, var(--accent-cta), #078f80);
+  color: white;
+}
+
+/* Small touch for images */
+.img-rounded { border-radius: 8px; }
+
+/* Animated decorative shapes for login/hero */
+.decoration-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.shape {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.12;
+  transform: translate3d(0,0,0);
+}
+.shape.shape-1 { width: 420px; height: 420px; background: radial-gradient(circle at 20% 30%, var(--accent), transparent 40%); left: -80px; top: -120px; animation: float 12s ease-in-out infinite; }
+.shape.shape-2 { width: 300px; height: 300px; background: radial-gradient(circle at 70% 40%, var(--accent-2), transparent 40%); right: -100px; top: 10%; animation: float 14s ease-in-out infinite reverse; }
+.shape.shape-3 { width: 220px; height: 220px; background: radial-gradient(circle at 30% 70%, #ffffff20, transparent 40%); left: 20%; bottom: -80px; animation: float 10s ease-in-out infinite; }
+
+@keyframes float {
+  0% { transform: translateY(0) translateX(0) rotate(0deg); }
+  50% { transform: translateY(-20px) translateX(8px) rotate(6deg); }
+  100% { transform: translateY(0) translateX(0) rotate(0deg); }
+}
+
+/* Login card */
+.login-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(212,175,55,0.06);
+  padding: 2rem;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(2,6,23,0.7);
+}
+.input-gold {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(212,175,55,0.12);
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  color: inherit;
+}
+.input-gold::placeholder { color: rgba(255,255,255,0.5); }
+
+/* Responsive tweaks for hero/login */
+.hero-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; align-items: center; min-height: 70vh; }
+@media (min-width: 992px) { .hero-grid { grid-template-columns: 1fr 420px; min-height: calc(100vh - 120px); } }
+
+/* App utilities for theme */
+.bg-app { background-color: var(--bg); }
+.bg-card { background-color: var(--card); }
+.bg-soft { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); }
+.text-app { color: var(--text); }
+.text-success { color: #22c55e; }
+.badge-gold {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  color: #080808;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+/* Small spacing helpers */
+.mt-2-sm { margin-top: 0.5rem; }
+.p-4-sm { padding: 1rem; }

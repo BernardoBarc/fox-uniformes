@@ -37,12 +37,26 @@ class CupomRepository {
         return await Cupom.findByIdAndDelete(id);
     }
 
-    async incrementarUso(id) {
-        return await Cupom.findByIdAndUpdate(
-            id, 
-            { $inc: { vezesUsado: 1 } },
-            { new: true }
-        );
+    async incrementarUso(id, clienteId = null) {
+        const cupom = await Cupom.findById(id);
+        if (!cupom) return null;
+
+        // Incrementa contador global
+        cupom.vezesUsado = (cupom.vezesUsado || 0) + 1;
+
+        // Incrementa contador por cliente
+        if (clienteId) {
+            cupom.usosPorCliente = cupom.usosPorCliente || [];
+            const entry = cupom.usosPorCliente.find(u => String(u.cliente) === String(clienteId));
+            if (entry) {
+                entry.usos = (entry.usos || 0) + 1;
+            } else {
+                cupom.usosPorCliente.push({ cliente: clienteId, usos: 1 });
+            }
+        }
+
+        await cupom.save();
+        return cupom;
     }
 
     async desativar(id) {

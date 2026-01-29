@@ -43,13 +43,13 @@ router.get('/cupons/:id', async (req, res) => {
 // POST /cupons/validar - Validar cupom para uso
 router.post('/cupons/validar', async (req, res) => {
     try {
-        const { codigo, valorPedido } = req.body;
+        const { codigo, valorPedido, clienteId } = req.body;
         
         if (!codigo) {
             return res.status(400).json({ error: 'Código do cupom é obrigatório' });
         }
 
-        const resultado = await cupomService.validarCupom(codigo, valorPedido || 0);
+        const resultado = await cupomService.validarCupom(codigo, valorPedido || 0, clienteId || null);
         res.json(resultado);
     } catch (error) {
         console.error('Erro ao validar cupom:', error);
@@ -138,7 +138,8 @@ router.put('/cupons/:id/desativar', async (req, res) => {
 // POST /cupons/:id/aplicar - Aplicar cupom (incrementar uso)
 router.post('/cupons/:id/aplicar', async (req, res) => {
     try {
-        const cupom = await cupomService.aplicarCupom(req.params.id);
+        const { clienteId } = req.body;
+        const cupom = await cupomService.aplicarCupom(req.params.id, clienteId || null);
         if (cupom) {
             res.json({ message: 'Cupom aplicado com sucesso', cupom });
         } else {

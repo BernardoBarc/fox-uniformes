@@ -17,9 +17,9 @@ const getAllProdutos = async () => {
     }
 };
 
-const saveProduto = async ({name, descricao, preco, categoria, imagem}) => {
+const saveProduto = async ({name, preco, categoria, imagem}) => {
     try {
-        const newProduto = new produto({ name, descricao, preco, categoria, imagem });
+        const newProduto = new produto({ name, preco, categoria, imagem });
         await newProduto.save();
         return await newProduto.populate('categoria');
     } catch (error) {

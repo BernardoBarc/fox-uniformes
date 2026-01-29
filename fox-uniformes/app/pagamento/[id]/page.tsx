@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { API_URL } from "../../config/api";
+import Button from "../../components/Button";
 
 interface Pedido {
   _id: string;
@@ -323,29 +324,26 @@ export default function PagamentoPage() {
   /* ================= TELAS ================= */
   if (loading)
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
+      <div className="min-h-screen bg-app flex items-center justify-center text-app">
         Carregando...
       </div>
     );
 
   if (error || !pagamento)
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-red-500">
+      <div className="min-h-screen bg-app flex items-center justify-center text-red-500">
         {error}
       </div>
     );
 
   if (pagamento.status === "Aprovado") {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-app flex items-center justify-center">
         {LoadingOverlay}
-        <div className="bg-gray-800 p-8 rounded-xl text-center">
-          <h1 className="text-2xl font-bold text-green-500">
-            Pagamento Confirmado!
-          </h1>
-          <p className="text-gray-400 mt-2">
-            Obrigado, {pagamento.clienteId.nome}.
-          </p>
+        <div className="bg-card p-8 rounded-xl text-center w-full max-w-md">
+          <h1 className="text-2xl font-bold text-success mb-2">Pagamento Confirmado!</h1>
+          <p className="kv-muted mt-2">Obrigado, {pagamento.clienteId.nome}.</p>
+          <div className="mt-4"><Button variant="ghost" className="w-full" onClick={() => { window.location.href = '/'; }}>Voltar</Button></div>
         </div>
       </div>
     );
@@ -353,53 +351,51 @@ export default function PagamentoPage() {
 
   if (pixData && aguardandoConfirmacao) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-app flex items-center justify-center p-4">
         {LoadingOverlay}
-        <div className="bg-gray-800 p-8 rounded-xl text-center">
-          <h1 className="text-xl text-green-500 mb-4">Pague com PIX</h1>
+        <div className="bg-card p-6 rounded-xl text-center w-full max-w-md">
+          <h1 className="text-xl kv-accent font-semibold mb-4">Pague com PIX</h1>
           <img
             src={`data:image/png;base64,${pixData.qrCodeBase64}`}
-            className="mx-auto mb-4 w-48 h-48 object-contain"
+            className="mx-auto mb-4 w-44 h-44 object-contain img-rounded"
             alt="QR Pix"
           />
-          <div className="bg-gray-700 p-2 rounded text-sm break-all">
+          <div className="bg-soft p-3 rounded text-sm break-all kv-muted">
             {pixData.copiaECola}
           </div>
-          <p className="text-xs text-gray-400 mt-2">
-            Aguardando confirmação automática…
-          </p>
+          <p className="text-xs kv-muted mt-2">Aguardando confirmação automática…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4">
+    <div className="min-h-screen bg-app text-app p-4">
       {LoadingOverlay}
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-orange-500 mb-2">🦊 Fox Uniformes</h1>
-          <p className="text-gray-400">Finalize seu pagamento</p>
+          <h1 className="text-3xl font-bold kv-accent mb-2">🦊 Fox Uniformes</h1>
+          <p className="kv-muted">Finalize seu pagamento</p>
         </div>
 
         {/* Resumo do Pedido */}
-        <div className="bg-gray-800 p-6 rounded-xl mb-6">
+        <div className="bg-card p-6 rounded-xl mb-6">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <span>📋</span> Resumo do Pedido
           </h2>
           
           <div className="space-y-3 mb-4">
-            <div className="flex justify-between text-gray-400">
+            <div className="flex justify-between kv-muted">
               <span>Cliente:</span>
-              <span className="text-white">{pagamento.clienteId?.nome}</span>
+              <span className="text-app font-medium">{pagamento.clienteId?.nome}</span>
             </div>
-            
+
             {pagamento.pedidos?.map((pedido, index) => (
-              <div key={pedido._id || index} className="flex justify-between items-center py-2 border-b border-gray-700">
+              <div key={pedido._id || index} className="flex justify-between items-center py-2 border-b border-white/6">
                 <div>
-                  <p className="text-white">{pedido.produtoId?.name || "Produto"}</p>
-                  <p className="text-sm text-gray-400">Qtd: {pedido.quantidade}</p>
+                  <p className="text-app">{pedido.produtoId?.name || "Produto"}</p>
+                  <p className="text-sm kv-muted">Qtd: {pedido.quantidade}</p>
                 </div>
                 <p className="text-orange-400 font-semibold">
                   R$ {pedido.preco?.toFixed(2)}
@@ -415,45 +411,39 @@ export default function PagamentoPage() {
         </div>
 
         {/* Método de Pagamento */}
-        <div className="bg-gray-800 p-6 rounded-xl mb-6">
+        <div className="bg-card p-6 rounded-xl mb-6">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <span>💳</span> Forma de Pagamento
           </h2>
 
           <div className="grid grid-cols-2 gap-4 mb-6">
             {/* PIX */}
-            <button
+            <Button
               onClick={() => setMetodoPagamento("PIX")}
-              className={`p-4 rounded-lg border-2 transition ${
-                metodoPagamento === "PIX"
-                  ? "border-green-500 bg-green-500/10"
-                  : "border-gray-600 hover:border-gray-500"
-              }`}
+              variant="ghost"
+              className={`p-4 ${metodoPagamento === "PIX" ? "border-green-500 bg-green-500/10" : "border-gray-600 hover:border-gray-500"} border-2`}
             >
               <div className="text-3xl mb-2">💚</div>
               <p className="font-semibold">PIX</p>
-              <p className="text-sm text-gray-400">Aprovação instantânea</p>
-            </button>
+              <p className="text-sm kv-muted">Aprovação instantânea</p>
+            </Button>
 
             {/* Cartão */}
-            <button
+            <Button
               onClick={() => setMetodoPagamento("CREDIT_CARD")}
-              className={`p-4 rounded-lg border-2 transition ${
-                metodoPagamento === "CREDIT_CARD"
-                  ? "border-blue-500 bg-blue-500/10"
-                  : "border-gray-600 hover:border-gray-500"
-              }`}
+              variant="ghost"
+              className={`p-4 ${metodoPagamento === "CREDIT_CARD" ? "border-blue-500 bg-blue-500/10" : "border-gray-600 hover:border-gray-500"} border-2`}
             >
               <div className="text-3xl mb-2">💳</div>
               <p className="font-semibold">Cartão de Crédito</p>
-              <p className="text-sm text-gray-400">Até 12x</p>
-            </button>
+              <p className="text-sm kv-muted">Até 12x</p>
+            </Button>
           </div>
 
           {/* Opções de Parcelamento (apenas para cartão) */}
           {metodoPagamento === "CREDIT_CARD" && (
             <div className="mb-6">
-              <label className="block text-sm text-gray-400 mb-2">Parcelas</label>
+              <label className="block text-sm kv-muted mb-2">Parcelas</label>
               <select
                 value={parcelas}
                 onChange={(e) => setParcelas(parseInt(e.target.value))}
@@ -470,7 +460,7 @@ export default function PagamentoPage() {
                 ))}
               </select>
               {parcelas > 1 && (
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs kv-muted mt-2">
                   Total com juros: R$ {(calcularParcela(pagamento.valorTotal, Number(parcelas)) * Number(parcelas)).toFixed(2)}
                 </p>
               )}
@@ -489,7 +479,7 @@ export default function PagamentoPage() {
 
         {/* Formulário Cartão */}
         {metodoPagamento === "CREDIT_CARD" && (
-          <div className="bg-gray-800 p-6 rounded-xl mb-6">
+          <div className="bg-card p-6 rounded-xl mb-6">
             <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
               <span>💳</span> Dados do Cartão
             </h2>
@@ -549,14 +539,11 @@ export default function PagamentoPage() {
         )}
 
         {/* Botão Pagar */}
-        <button
+        <Button
           onClick={handlePagar}
           disabled={processando}
-          className={`w-full py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2 ${
-            metodoPagamento === "PIX"
-              ? "bg-green-600 hover:bg-green-700"
-              : "bg-blue-600 hover:bg-blue-700"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          variant={metodoPagamento === "PIX" ? "gold" : "cta"}
+          className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {processando ? (
             <>
@@ -564,11 +551,9 @@ export default function PagamentoPage() {
               Processando...
             </>
           ) : (
-            <>
-              {metodoPagamento === "PIX" ? "💚 Pagar com PIX" : "💳 Pagar com Cartão"}
-            </>
+            <>{metodoPagamento === "PIX" ? "💚 Pagar com PIX" : "💳 Pagar com Cartão"}</>
           )}
-        </button>
+        </Button>
 
         {/* Segurança */}
         <div className="text-center mt-6 text-gray-500 text-sm">

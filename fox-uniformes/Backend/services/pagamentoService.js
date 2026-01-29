@@ -459,7 +459,7 @@ const confirmarPagamentoPorExternalId = async (
     nome: cliente.nome,
     numeroNota: notaFiscal.numero,
     caminhoPdf: notaFiscal.caminho,
-    linkAcompanhamento: `${FRONTEND_URL}/acompanhar/`
+    linkAcompanhamento: `${FRONTEND_URL}/acompanhar`
   });
 
   console.log('[DEBUG] email de nota fiscal enviado');

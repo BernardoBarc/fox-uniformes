@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { API_URL } from "../config/api";
+import Header from "../components/Header";
+import Button from "../components/Button";
 
 interface Produto {
   _id: string;
@@ -195,39 +197,24 @@ export default function AcompanharPedidosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      {/* Header */}
-      <header className="bg-gray-800/50 backdrop-blur-sm border-b border-gray-700">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-3xl">🦊</span>
-            <span className="text-xl font-bold text-orange-500">Fox Uniformes</span>
-          </Link>
-          <Link 
-            href="/" 
-            className="text-gray-400 hover:text-white transition text-sm"
-          >
-            ← Voltar ao início
-          </Link>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-app text-app">
+      <Header />
+      <main className="container-responsive max-w-4xl mx-auto px-4 py-8">
         {/* Título */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
+          <h1 className="text-3xl font-bold kv-accent mb-2">
             📦 Acompanhe seus Pedidos
           </h1>
-          <p className="text-gray-400">
+          <p className="kv-muted">
             Digite seu CPF para consultar o status dos seus pedidos
           </p>
         </div>
 
         {/* Formulário de Busca */}
-        <div className="bg-gray-800 rounded-2xl p-6 mb-8 shadow-xl">
+        <div className="bg-card rounded-2xl p-6 mb-8">
           <form onSubmit={buscarPedidos} className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
-              <label className="block text-sm text-gray-400 mb-2">
+              <label className="block text-sm kv-muted mb-2">
                 Digite seu CPF
               </label>
               <input
@@ -236,14 +223,15 @@ export default function AcompanharPedidosPage() {
                 onChange={(e) => setCpf(formatarCPF(e.target.value))}
                 placeholder="000.000.000-00"
                 maxLength={14}
-                className="w-full bg-gray-700 rounded-xl px-4 py-3 text-white text-lg focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder-gray-500"
+                className="w-full bg-card rounded-xl px-4 py-3 text-app text-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)] placeholder:kv-muted"
               />
             </div>
             <div className="flex items-end gap-2">
-              <button
+              <Button
                 type="submit"
                 disabled={loading || cpf.replace(/\D/g, "").length !== 11}
-                className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-8 py-3 rounded-xl font-semibold text-white transition flex items-center gap-2"
+                variant="gold"
+                className="px-6 py-3 rounded-xl font-semibold text-black flex items-center gap-2"
               >
                 {loading ? (
                   <>
@@ -251,19 +239,18 @@ export default function AcompanharPedidosPage() {
                     Buscando...
                   </>
                 ) : (
-                  <>
-                    🔍 Buscar
-                  </>
+                  <>🔍 Buscar</>
                 )}
-              </button>
+              </Button>
               {buscaRealizada && (
-                <button
+                <Button
                   type="button"
                   onClick={limparBusca}
-                  className="bg-gray-600 hover:bg-gray-700 px-4 py-3 rounded-xl font-semibold text-white transition"
+                  variant="ghost"
+                  className="px-4 py-3 rounded-xl font-semibold"
                 >
                   ✕
-                </button>
+                </Button>
               )}
             </div>
           </form>
@@ -277,25 +264,15 @@ export default function AcompanharPedidosPage() {
 
         {/* Dados do Cliente */}
         {cliente && (
-          <div className="bg-gray-800 rounded-2xl p-6 mb-6 shadow-xl">
-            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-              <span>👤</span> Olá, {cliente.nome.split(" ")[0]}!
+          <div className="bg-card rounded-2xl p-6 mb-6">
+            <h2 className="text-xl font-semibold kv-accent mb-4 flex items-center gap-2">
+              👤 Olá, {cliente.nome.split(" ")[0]}!
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              <div className="text-gray-400">
-                <span className="text-gray-500">CPF:</span> {cliente.cpf}
-              </div>
-              <div className="text-gray-400">
-                <span className="text-gray-500">Telefone:</span> {cliente.telefone}
-              </div>
-              {cliente.email && (
-                <div className="text-gray-400">
-                  <span className="text-gray-500">Email:</span> {cliente.email}
-                </div>
-              )}
-              <div className="text-gray-400">
-                <span className="text-gray-500">Cidade:</span> {cliente.cidade} - {cliente.estado}
-              </div>
+              <div className="kv-muted"><span className="text-sm kv-muted">CPF:</span> {cliente.cpf}</div>
+              <div className="kv-muted"><span className="text-sm kv-muted">Telefone:</span> {cliente.telefone}</div>
+              {cliente.email && <div className="kv-muted"><span className="text-sm kv-muted">Email:</span> {cliente.email}</div>}
+              <div className="kv-muted"><span className="text-sm kv-muted">Cidade:</span> {cliente.cidade} - {cliente.estado}</div>
             </div>
           </div>
         )}
@@ -303,36 +280,31 @@ export default function AcompanharPedidosPage() {
         {/* Lista de Pedidos */}
         {buscaRealizada && cliente && (
           <div>
-            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-              <span>📋</span> Seus Pedidos ({pedidos.length})
+            <h2 className="text-xl font-semibold kv-accent mb-4 flex items-center gap-2">
+              📋 Seus Pedidos ({pedidos.length})
             </h2>
 
             {pedidos.length === 0 ? (
-              <div className="bg-gray-800 rounded-2xl p-8 text-center shadow-xl">
+              <div className="bg-card rounded-2xl p-8 text-center">
                 <div className="text-6xl mb-4">📭</div>
-                <p className="text-gray-400 text-lg">
+                <p className="kv-muted text-lg">
                   Nenhum pedido encontrado para este CPF
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
                 {pedidos.map((pedido) => (
-                  <div 
-                    key={pedido._id} 
-                    className="bg-gray-800 rounded-2xl p-6 shadow-xl border border-gray-700 hover:border-gray-600 transition"
-                  >
+                  <div key={pedido._id} className="bg-card rounded-2xl p-6 border border-white/6 hover:border-white/12 transition">
                     {/* Cabeçalho do Pedido */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                       <div>
-                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-app flex items-center gap-2">
                           {pedido.produtoId?.name || "Produto"}
                           {pedido.produtoId?.tamanho && (
-                            <span className="text-sm bg-gray-700 px-2 py-0.5 rounded">
-                              {pedido.produtoId.tamanho}
-                            </span>
+                            <span className="text-sm badge-gold">{pedido.produtoId.tamanho}</span>
                           )}
                         </h3>
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm kv-muted">
                           Pedido em {new Date(pedido.createdAt).toLocaleDateString("pt-BR")}
                         </p>
                       </div>
@@ -429,16 +401,6 @@ export default function AcompanharPedidosPage() {
           </div>
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-800 py-6 mt-12">
-        <div className="max-w-6xl mx-auto px-4 text-center text-gray-500 text-sm">
-          <p>🦊 Fox Uniformes - Uniformes de Qualidade</p>
-          <p className="mt-1">
-            Dúvidas? Entre em contato via WhatsApp
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

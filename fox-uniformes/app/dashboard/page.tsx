@@ -1,7 +1,8 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "../config/api";
+import Sidebar from "../components/Sidebar";
 
 // Tipos
 interface UserData {
@@ -62,6 +63,61 @@ interface Trajeto {
 
 type TabType = "dashboard" | "pedidos" | "trajetos" | "clientes" | "novoPedido" | "novoTrajeto" | "novoCliente";
 
+// Componente ComboBox simples, sem dependências externas — acessível e estilizado com Tailwind
+const ComboBox: React.FC<{
+  label?: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}> = ({ label, options, value, onChange, placeholder }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const selectedLabel = options.find(o => o.value === value)?.label || '';
+
+  return (
+    <div className="relative" ref={ref}>
+      {label && <label className="text-sm text-white mb-1 block">{label}</label>}
+      <button
+        type="button"
+        className={`input-gold w-full text-left ${value ? 'text-white' : 'text-gray-400'}`}
+        onClick={() => setOpen(s => !s)}
+      >
+        {value ? selectedLabel : (placeholder || 'Selecionar')}
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-card border border-white/6 rounded shadow max-h-48 overflow-auto">
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-sm kv-muted">Nenhuma opção</div>
+          ) : (
+            options.map(opt => (
+              <div
+                key={opt.value}
+                className="px-3 py-2 cursor-pointer hover:bg-white/5 text-white"
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+              >
+                {opt.label}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -100,7 +156,7 @@ export default function DashboardPage() {
     nomeCliente: "",
     cpfCliente: "",
     telefoneCliente: "",
-    entrega: "",
+    // entrega removida: a data será definida em outro fluxo posteriormente
   });
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [buscandoCliente, setBuscandoCliente] = useState(false);
@@ -195,6 +251,10 @@ export default function DashboardPage() {
     cep: "",
     complemento: "",
   });
+
+  // estados para mostrar formulários rápidos na UI do vendedor
+  const [showNovoTrajeto, setShowNovoTrajeto] = useState(false);
+  const [showNovoCliente, setShowNovoCliente] = useState(false);
 
   const getToken = () => localStorage.getItem("token");
 
@@ -315,6 +375,12 @@ export default function DashboardPage() {
       return;
     }
 
+    // Requer que um cliente esteja selecionado para validar cupom por cliente
+    if (!clienteSelecionado) {
+      setErroCupom("Busque/Selecione o cliente antes de validar o cupom");
+      return;
+    }
+
     setValidandoCupom(true);
     setErroCupom(null);
 
@@ -325,6 +391,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           codigo: codigoCupom,
           valorPedido: totalCarrinho,
+          clienteId: clienteSelecionado._id,
         }),
       });
 
@@ -528,8 +595,8 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!novoPedido.nomeCliente || !novoPedido.entrega || !novoPedido.cpfCliente) {
-      setMessage({ type: "error", text: "Preencha o CPF, nome do cliente e a data de entrega!" });
+    if (!novoPedido.nomeCliente || !novoPedido.cpfCliente) {
+      setMessage({ type: "error", text: "Preencha o CPF e nome do cliente!" });
       return;
     }
 
@@ -564,7 +631,7 @@ export default function DashboardPage() {
         formData.append("quantidade", item.quantidade.toString());
         formData.append("preco", precoComDesconto.toString());
         formData.append("precoOriginal", item.precoTotal.toString());
-        formData.append("entrega", novoPedido.entrega);
+        // entrega removida: será definida posteriormente por outro fluxo
         formData.append("observacoes", item.observacoes);
         formData.append("vendedorId", userData?.id || "");
         formData.append("status", "Aguardando Pagamento");
@@ -601,6 +668,7 @@ export default function DashboardPage() {
           await fetch(`${API_URL}/cupons/${cupomAplicado._id}/aplicar`, {
             method: "POST",
             headers: getAuthHeaders(),
+            body: JSON.stringify({ clienteId: clienteSelecionado._id }),
           });
         } catch (error) {
           console.warn("Aviso: Erro ao registrar uso do cupom");
@@ -633,7 +701,7 @@ export default function DashboardPage() {
         : `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso! Link de pagamento enviado para o email do cliente.`;
 
       setMessage({ type: "success", text: mensagemSucesso });
-      setNovoPedido({ nomeCliente: "", cpfCliente: "", telefoneCliente: "", entrega: "" });
+      setNovoPedido({ nomeCliente: "", cpfCliente: "", telefoneCliente: "" });
       setClienteSelecionado(null);
       setCarrinho([]);
       setCupomAplicado(null);
@@ -660,6 +728,8 @@ export default function DashboardPage() {
           ...novoTrajeto,
           vendedorId: userData?.id,
           status: "Pendente",
+          // enviar data em ISO (se preenchida)
+          dataVisita: convertDateToISO(novoTrajeto.dataVisita),
         }),
       });
 
@@ -755,1104 +825,394 @@ export default function DashboardPage() {
     }
   };
 
+  // Formata entrada de data para DD/MM/AAAA enquanto o usuário digita
+  const formatDateInput = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0,8); // até 8 dígitos
+    const day = cleaned.slice(0,2);
+    const month = cleaned.slice(2,4);
+    const year = cleaned.slice(4,8);
+    let result = day;
+    if (month) result += `/${month}`;
+    if (year) result += `/${year}`;
+    return result;
+  };
+
+  // Converte DD/MM/AAAA para AAAA-MM-DD (ISO) ou retorna empty string se inválido
+  const convertDateToISO = (dateStr: string) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return "";
+    const [d, m, y] = parts;
+    if (!d || !m || !y) return "";
+    const day = d.padStart(2, '0');
+    const month = m.padStart(2, '0');
+    const year = y.length === 4 ? y : (y.length === 2 ? `20${y}` : '');
+    if (!year) return "";
+    return `${year}-${month}-${day}`;
+  };
+
   if (!userData) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-white text-xl">Carregando...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="bg-gray-800 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-orange-500">Fox Uniformes</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-300">Olá, {userData.login}</span>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen">
+      <div className="bg-gradient-to-b from-transparent to-transparent min-h-screen">
+        {/* Header é fornecido globalmente no layout; removido localmente para evitar duplicação */}
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-gray-800 min-h-screen p-4">
-          <nav className="space-y-2">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "dashboard" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              📊 Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab("pedidos")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "pedidos" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              📦 Meus Pedidos
-            </button>
-            <button
-              onClick={() => setActiveTab("novoPedido")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoPedido" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              🛒 Nova Venda
-            </button>
-            <button
-              onClick={() => setActiveTab("trajetos")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "trajetos" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              🗺️ Minhas Rotas
-            </button>
-            <button
-              onClick={() => setActiveTab("novoTrajeto")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoTrajeto" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              ➕ Nova Rota
-            </button>
-            <button
-              onClick={() => setActiveTab("clientes")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "clientes" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              👥 Meus Clientes
-            </button>
-            <button
-              onClick={() => setActiveTab("novoCliente")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoCliente" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              ➕ Novo Cliente
-            </button>
-          </nav>
-        </aside>
+         <div className="container-responsive grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
+           <div className="lg:col-span-3">
+             <div className="sticky top-6">
+               <Sidebar
+                 active={activeTab}
+                 onChange={(t) => setActiveTab(t as any)}
+                 items={[
+                   { key: 'dashboard', label: '📊 Dashboard' },
+                   { key: 'pedidos', label: '📦 Pedidos' },
+                   { key: 'novoPedido', label: '💸 Realizar Venda' },
+                   { key: 'trajetos', label: '🗺️ Trajetos' },
+                   { key: 'clientes', label: '👤 Clientes' },
+                 ]}
+               />
+             </div>
+           </div>
+           
+           <div className="lg:col-span-9">
+             <main className="space-y-6">
+               {/* Mensagem de feedback */}
+               {message && (
+                 <div className={`p-4 rounded-lg ${message.type === "success" ? "bg-green-700/30" : "bg-red-700/30"}`}>
+                   {message.text}
+                 </div>
+               )}
 
-        {/* Main Content */}
-        <main className="flex-1 p-8">
-          {/* Mensagem de feedback */}
-          {message && (
-            <div className={`mb-4 p-4 rounded-lg ${message.type === "success" ? "bg-green-600" : "bg-red-600"}`}>
-              {message.text}
-            </div>
-          )}
+              {/* Conteúdo por aba */}
 
-          {/* Dashboard Principal */}
-          {activeTab === "dashboard" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Painel de Controle</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
-                  <h3 className="text-lg text-gray-400">Pedidos Ativos</h3>
-                  <p className="text-4xl font-bold text-orange-500">{pedidosAtivos.length}</p>
-                </div>
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
-                  <h3 className="text-lg text-gray-400">Rotas Cadastradas</h3>
-                  <p className="text-4xl font-bold text-blue-500">{trajetos.length}</p>
-                </div>
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
-                  <h3 className="text-lg text-gray-400">Clientes</h3>
-                  <p className="text-4xl font-bold text-green-500">{clientes.length}</p>
-                </div>
-              </div>
-
-              {/* Pedidos Recentes */}
-              <div className="mt-8">
-                <h3 className="text-xl font-bold mb-4">Pedidos Recentes</h3>
-                <div className="bg-gray-800 rounded-xl overflow-hidden">
-                  {pedidosAtivos.slice(0, 5).map((pedido) => (
-                    <div key={pedido._id} className="flex justify-between items-center p-4 border-b border-gray-700">
-                      <div>
-                        <p className="font-semibold">{pedido.nomeCliente}</p>
-                        <p className="text-sm text-gray-400">{pedido.produtoId?.name || "Produto"}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(pedido.status)}`}>
-                        {pedido.status}
-                      </span>
+              {activeTab === 'dashboard' && (
+                <section>
+                  <h2 className="text-3xl font-bold mb-4 kv-accent">Painel</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent)' }}>
+                      <h3 className="text-lg kv-muted">Pedidos Pendentes</h3>
+                      <p className="text-4xl font-bold kv-accent">{pedidos.filter(p => p.status === 'Pendente').length}</p>
                     </div>
-                  ))}
-                  {pedidosAtivos.length === 0 && (
-                    <p className="p-4 text-gray-400">Nenhum pedido encontrado</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+                    <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent-2)' }}>
+                      <h3 className="text-lg kv-muted">Em Progresso</h3>
+                      <p className="text-4xl font-bold kv-accent">{pedidos.filter(p => p.status === 'Em Progresso').length}</p>
+                    </div>
+                    <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'rgba(34,197,94,0.8)' }}>
+                      <h3 className="text-lg kv-muted">Concluídos</h3>
+                      <p className="text-4xl font-bold text-success">{pedidos.filter(p => p.status === 'Concluído').length}</p>
+                    </div>
+                    <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent-2)' }}>
+                      <h3 className="text-lg kv-muted">Faturamento</h3>
+                      <p className="text-3xl font-bold kv-accent">R$ {pedidos.filter(p => p.status === 'Concluído').reduce((acc, p) => acc + (p.preco || 0), 0).toFixed(2)}</p>
+                    </div>
+                  </div>
+                </section>
+              )}
 
-          {/* Lista de Pedidos */}
-          {activeTab === "pedidos" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Meus Pedidos</h2>
-              <div className="bg-gray-800 rounded-xl overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Cliente</th>
-                      <th className="px-4 py-3 text-left">Produto</th>
-                      <th className="px-4 py-3 text-left">Qtd</th>
-                      <th className="px-4 py-3 text-left">Preço</th>
-                      <th className="px-4 py-3 text-left">Entrega</th>
-                      <th className="px-4 py-3 text-left">Foto</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pedidosAtivos.map((pedido) => (
-                      <tr key={pedido._id} className="border-b border-gray-700 hover:bg-gray-750">
-                        <td className="px-4 py-3">
+              {activeTab === 'pedidos' && (
+                <section>
+                  <h3 className="text-xl font-semibold kv-accent mb-4">Pedidos</h3>
+                  {pedidos.filter(p => p.status !== 'Cancelado').length === 0 ? (
+                    <div className="bg-card p-4 rounded">Nenhum pedido encontrado.</div>
+                  ) : (
+                    <div className="bg-card p-4 rounded space-y-2">
+                      {pedidos.filter(p => p.status !== 'Cancelado').map(p => (
+                        <div key={p._id} className="flex items-center justify-between p-3 border-b border-white/6">
                           <div>
-                            <p>{pedido.nomeCliente}</p>
-                            {pedido.observacoes && (
-                              <p className="text-xs text-orange-400 mt-1" title={pedido.observacoes}>
-                                📝 {pedido.observacoes.substring(0, 30)}...
-                              </p>
-                            )}
+                            <div className="font-medium">{p.nomeCliente}</div>
+                            <div className="text-sm kv-muted">{p.produtoId?.name || 'Produto'} • R$ {p.preco?.toFixed(2)}</div>
+                            <div className="text-xs kv-muted">Criado em: {new Date(p.createdAt).toLocaleString()}</div>
                           </div>
-                        </td>
-                        <td className="px-4 py-3">{pedido.produtoId?.name || "N/A"}</td>
-                        <td className="px-4 py-3">{pedido.quantidade}</td>
-                        <td className="px-4 py-3">R$ {pedido.preco?.toFixed(2)}</td>
-                        <td className="px-4 py-3">{pedido.entrega}</td>
-                        <td className="px-4 py-3">
-                          {pedido.photo ? (
-                            <a 
-                              href={getImageUrl(pedido.photo) || "#"} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-orange-400 hover:text-orange-300"
-                            >
-                              📷 Ver
-                            </a>
-                          ) : (
-                            <span className="text-gray-500">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(pedido.status)}`}>
-                            {pedido.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {pedidosAtivos.length === 0 && (
-                  <p className="p-4 text-gray-400 text-center">Nenhum pedido encontrado</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Novo Pedido - Sistema de Carrinho */}
-          {activeTab === "novoPedido" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">🛒 Nova Venda</h2>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Formulário de Adicionar Item */}
-                <div className="lg:col-span-2">
-                  <div className="bg-gray-800 p-6 rounded-xl">
-                    <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                      <span>📦</span> Adicionar Produto ao Carrinho
-                    </h3>
-                    
-                    {/* Informações do Cliente */}
-                    <div className="mb-6 pb-6 border-b border-gray-700">
-                      <h4 className="text-lg font-medium mb-4 text-orange-400">👤 Dados do Cliente</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm text-gray-400 mb-1">CPF do Cliente *</label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={novoPedido.cpfCliente}
-                              onChange={(e) => {
-                                const cpfFormatado = formatarCPF(e.target.value);
-                                setNovoPedido({ ...novoPedido, cpfCliente: cpfFormatado });
-                                if (cpfFormatado.replace(/\D/g, "").length === 11) {
-                                  buscarClientePorCPF(cpfFormatado);
-                                }
-                              }}
-                              className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                              placeholder="000.000.000-00"
-                              maxLength={14}
-                            />
-                            {buscandoCliente && (
-                              <div className="absolute right-3 top-2.5">
-                                <div className="animate-spin h-5 w-5 border-2 border-orange-500 rounded-full border-t-transparent"></div>
-                              </div>
-                            )}
-                          </div>
-                          {novoPedido.cpfCliente.replace(/\D/g, "").length === 11 && !clienteSelecionado && !buscandoCliente && (
-                            <p className="text-xs text-red-400 mt-1">
-                              ⚠️ Cliente não encontrado. <button 
-                                type="button" 
-                                onClick={() => setActiveTab("novoCliente")}
-                                className="text-orange-400 underline"
-                              >
-                                Cadastrar novo cliente
-                              </button>
-                            </p>
-                          )}
-                          {clienteSelecionado && (
-                            <p className="text-xs text-green-400 mt-1">✅ Cliente encontrado</p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm text-gray-400 mb-1">Nome do Cliente *</label>
-                          <input
-                            type="text"
-                            value={novoPedido.nomeCliente}
-                            onChange={(e) => setNovoPedido({ ...novoPedido, nomeCliente: e.target.value })}
-                            className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                            placeholder="Nome será preenchido automaticamente"
-                            disabled={!!clienteSelecionado}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp) *</label>
-                          <input
-                            type="text"
-                            value={novoPedido.telefoneCliente}
-                            onChange={(e) => setNovoPedido({ ...novoPedido, telefoneCliente: e.target.value })}
-                            className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                            placeholder="(00) 00000-0000"
-                            disabled={!!clienteSelecionado}
-                          />
-                          <p className="text-xs text-gray-500 mt-1">O link de pagamento será enviado para este número</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm text-gray-400 mb-1">Data de Entrega *</label>
-                          <input
-                            type="date"
-                            value={novoPedido.entrega}
-                            onChange={(e) => setNovoPedido({ ...novoPedido, entrega: e.target.value })}
-                            className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Card do Cliente Selecionado */}
-                      {clienteSelecionado && (
-                        <div className="mt-4 p-4 bg-gray-700 rounded-lg border border-green-500/30">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="font-semibold text-green-400">✅ Cliente Selecionado</p>
-                              <p className="text-sm text-gray-300 mt-1">{clienteSelecionado.nome}</p>
-                              <p className="text-xs text-gray-400">
-                                📞 {clienteSelecionado.telefone} • 📧 {clienteSelecionado.email || "Sem email"}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                📍 {clienteSelecionado.cidade} - {clienteSelecionado.estado}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setClienteSelecionado(null);
-                                setNovoPedido({ ...novoPedido, cpfCliente: "", nomeCliente: "", telefoneCliente: "" });
-                              }}
-                              className="text-red-400 hover:text-red-300 text-sm"
-                            >
-                              ✕ Limpar
-                            </button>
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="text-sm badge-gold">{p.status}</div>
                           </div>
                         </div>
-                      )}
+                      ))}
                     </div>
+                  )}
+                </section>
+              )}
 
-                    {/* Seleção de Produto */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Categoria */}
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Categoria</label>
-                        <select
-                          value={itemAtual.categoria}
-                          onChange={(e) => {
-                            setItemAtual({ 
-                              ...itemAtual, 
-                              categoria: e.target.value,
-                              produtoId: ""
-                            });
-                          }}
-                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        >
-                          <option value="">Selecione uma categoria</option>
-                          {categoriasUnicas.map((categoria) => (
-                            <option key={categoria._id} value={categoria._id}>
-                              {categoria.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+              {activeTab === 'novoPedido' && (
+                <section>
+                  <h3 className="text-xl font-semibold kv-accent mb-4">Realizar Venda</h3>
 
-                      {/* Produto */}
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Produto</label>
-                        <select
-                          value={itemAtual.produtoId}
-                          onChange={(e) => setItemAtual({ ...itemAtual, produtoId: e.target.value })}
-                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={!itemAtual.categoria}
-                        >
-                          <option value="">
-                            {itemAtual.categoria ? "Selecione um produto" : "Selecione uma categoria primeiro"}
-                          </option>
-                          {produtosFiltrados.map((produto) => (
-                            <option key={produto._id} value={produto._id}>
-                              {produto.name} - R$ {produto.preco?.toFixed(2)}
-                            </option>
-                          ))}
-                        </select>
-                        {itemAtual.categoria && produtosFiltrados.length === 0 && (
-                          <p className="text-xs text-yellow-400 mt-1">Nenhum produto nesta categoria</p>
-                        )}
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Formulário principal */}
+                    <div className="md:col-span-2 bg-card p-4 rounded">
+                      <h4 className="font-semibold mb-2">Cliente</h4>
 
-                      {/* Tamanho */}
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Tamanho</label>
-                        <select
-                          value={itemAtual.tamanho}
-                          onChange={(e) => setItemAtual({ ...itemAtual, tamanho: e.target.value })}
-                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={!itemAtual.produtoId}
-                        >
-                          <option value="">
-                            {itemAtual.produtoId ? "Selecione o tamanho" : "Selecione um produto primeiro"}
-                          </option>
-                          {tamanhosDisponiveis.map((tam) => (
-                            <option key={tam} value={tam}>
-                              {tam}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Quantidade */}
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Quantidade</label>
+                      <div className="flex gap-2 items-center mb-4">
                         <input
-                          type="number"
-                          min="1"
-                          value={itemAtual.quantidade}
-                          onChange={(e) => setItemAtual({ ...itemAtual, quantidade: parseInt(e.target.value) || 1 })}
-                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          className="input-gold text-white"
+                          placeholder="CPF do cliente"
+                          value={novoPedido.cpfCliente}
+                          onChange={e => setNovoPedido(s => ({ ...s, cpfCliente: e.target.value }))}
                         />
+                        <button type="button" className="btn btn-gold" onClick={() => buscarClientePorCPF(novoPedido.cpfCliente)}>Buscar</button>
                       </div>
 
-                      {/* Preço Prévia */}
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Preço do Item</label>
-                        <div className="w-full bg-gray-600 rounded-lg px-4 py-2 text-orange-400 font-semibold">
-                          {itemAtual.produtoId ? (
-                            `R$ ${((produtos.find(p => p._id === itemAtual.produtoId)?.preco || 0) * itemAtual.quantidade).toFixed(2)}`
-                          ) : (
-                            "Selecione um produto"
-                          )}
+                      {clienteSelecionado ? (
+                        <div className="mb-4 p-3 rounded-md bg-green-900/60 border border-green-700 text-white">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-lg font-bold">{clienteSelecionado.nome}</div>
+                              <div className="text-sm kv-muted">{clienteSelecionado.email} • {clienteSelecionado.telefone}</div>
+                              <div className="text-xs kv-muted mt-1">CPF: {clienteSelecionado.cpf}</div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button className="btn btn-ghost" onClick={() => { setClienteSelecionado(null); setNovoPedido(prev => ({ ...prev, nomeCliente: '', telefoneCliente: '' })); }}>Remover</button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm kv-muted mb-4">Nenhum cliente selecionado. Busque por CPF ou crie um novo cliente na aba Clientes.</div>
+                      )}
+
+                      <h4 className="font-semibold mb-2">Adicionar item</h4>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                        <div>
+                          <ComboBox
+                            label="Categoria"
+                            options={categoriasUnicas.map(cat => ({ value: cat._id, label: cat.name }))}
+                            value={itemAtual.categoria}
+                            onChange={v => setItemAtual(s => ({ ...s, categoria: v, produtoId: '' }))}
+                            placeholder="Selecionar categoria"
+                          />
+                        </div>
+
+                        <div>
+                          <ComboBox
+                            label="Produto"
+                            options={produtosFiltrados.map(p => ({ value: p._id, label: `${p.name} — R$ ${p.preco.toFixed(2)}` }))}
+                            value={itemAtual.produtoId}
+                            onChange={v => setItemAtual(s => ({ ...s, produtoId: v }))}
+                            placeholder="Selecionar produto"
+                          />
                         </div>
                       </div>
 
-                      {/* Observações do Item */}
-                      <div className="md:col-span-2">
-                        <label className="block text-sm text-gray-400 mb-1">Observações / Personalização do Item</label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                        <div>
+                          <ComboBox
+                            label="Tamanho"
+                            options={tamanhosDisponiveis.map(t => ({ value: t, label: t }))}
+                            value={itemAtual.tamanho}
+                            onChange={v => setItemAtual(s => ({ ...s, tamanho: v }))}
+                            placeholder="Tamanho"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-sm text-white mb-1 block">Quantidade</label>
+                          <input
+                            type="number"
+                            min={1}
+                            className="input-gold text-white w-20"
+                            value={itemAtual.quantidade}
+                            onChange={e => setItemAtual(s => ({ ...s, quantidade: Number(e.target.value) }))}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-sm text-white mb-1 block">Anexar imagem (opcional)</label>
+                          <div className="flex items-center gap-2">
+                            <input id="foto-input" type="file" accept="image/*" onChange={handleFotoChange} className="hidden" />
+
+                            {/* botão com aparência consistente */}
+                            <label htmlFor="foto-input" className="inline-flex items-center px-3 py-2 rounded-md border border-white/10 cursor-pointer bg-card text-white">
+                              <span className="text-sm">Escolher arquivo</span>
+                            </label>
+
+                            {/* área que mostra miniatura + nome do arquivo */}
+                            <div className="flex items-center gap-3 flex-1">
+                              {previewFotoAtual ? (
+                                <img src={previewFotoAtual} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                              ) : null}
+
+                              <div className="flex-1">
+                                {fotoItemAtual ? (
+                                  <div className="input-gold px-3 py-2 text-sm text-white truncate">{fotoItemAtual.name}</div>
+                                ) : (
+                                  <div className="text-sm kv-muted">Nenhum arquivo selecionado</div>
+                                )}
+                              </div>
+
+                              {fotoItemAtual && (
+                                <button type="button" className="btn btn-ghost ml-2" onClick={() => { setFotoItemAtual(null); setPreviewFotoAtual(null); }}>Limpar</button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="text-sm kv-muted block mb-1">Observações (opcional)</label>
                         <textarea
+                          className="input-gold text-white w-full h-24"
+                          placeholder="Ex: personalização, instruções de entrega, observações"
                           value={itemAtual.observacoes}
-                          onChange={(e) => setItemAtual({ ...itemAtual, observacoes: e.target.value })}
-                          placeholder="Descreva personalizações, cores específicas, etc."
-                          className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px]"
+                          onChange={e => setItemAtual(s => ({ ...s, observacoes: e.target.value }))}
                         />
                       </div>
 
-                      {/* Upload de Foto do Item */}
-                      <div className="md:col-span-2">
-                        <label className="block text-sm text-gray-400 mb-1">📷 Foto de Referência (opcional)</label>
-                        
-                        {!previewFotoAtual ? (
-                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-orange-500 hover:bg-gray-750 transition">
-                            <div className="flex flex-col items-center justify-center py-4">
-                              <svg className="w-8 h-8 mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              <p className="text-sm text-gray-400">
-                                <span className="font-semibold text-orange-400">Clique para enviar</span>
-                              </p>
-                            </div>
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              accept="image/*"
-                              onChange={handleFotoChange}
-                            />
-                          </label>
-                        ) : (
-                          <div className="relative">
-                            <img 
-                              src={previewFotoAtual} 
-                              alt="Preview" 
-                              className="w-full h-32 object-cover rounded-lg"
-                            />
-                            <button
-                              type="button"
-                              onClick={removerFoto}
-                              className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full transition"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
+                      <div className="flex gap-2">
+                        <button type="button" className="btn btn-gold" onClick={handleAdicionarAoCarrinho}>Adicionar ao carrinho</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => { setItemAtual({ categoria: '', produtoId: '', tamanho: '', quantidade: 1, observacoes: '' }); setFotoItemAtual(null); setPreviewFotoAtual(null); }}>Limpar</button>
                       </div>
+
+                      {previewFotoAtual && (
+                        <img src={previewFotoAtual} alt="Preview" className="mt-3 w-32 h-32 object-cover rounded" />
+                      )}
                     </div>
 
-                    {/* Botão Adicionar ao Carrinho */}
-                    <button
-                      type="button"
-                      onClick={handleAdicionarAoCarrinho}
-                      disabled={!itemAtual.produtoId}
-                      className="mt-4 w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      <span>➕</span> Adicionar ao Carrinho
-                    </button>
-                  </div>
-                </div>
+                    {/* Carrinho */}
+                    <div className="md:col-span-1 bg-card p-4 rounded">
+                      <h4 className="font-semibold mb-2">Carrinho</h4>
 
-                {/* Carrinho */}
-                <div className="lg:col-span-1">
-                  <div className="bg-gray-800 p-6 rounded-xl sticky top-4">
-                    <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                      <span>🛒</span> Carrinho
-                      {carrinho.length > 0 && (
-                        <span className="bg-orange-600 text-sm px-2 py-1 rounded-full">
-                          {carrinho.length} {carrinho.length === 1 ? "item" : "itens"}
-                        </span>
-                      )}
-                    </h3>
-
-                    {carrinho.length === 0 ? (
-                      <div className="text-center py-8 text-gray-400">
-                        <svg className="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        <p>Carrinho vazio</p>
-                        <p className="text-sm mt-1">Adicione produtos para começar</p>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Lista de Itens */}
-                        <div className="space-y-3 max-h-96 overflow-y-auto mb-4">
-                          {carrinho.map((item) => (
-                            <div key={item.id} className="bg-gray-700 p-3 rounded-lg">
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <p className="font-semibold text-sm">{item.produtoNome}</p>
-                                  <p className="text-xs text-gray-400">
-                                    {item.categoria} • {item.tamanho}
-                                  </p>
-                                  <p className="text-xs text-gray-400">
-                                    {item.quantidade}x R$ {item.precoUnitario.toFixed(2)}
-                                  </p>
-                                  {item.observacoes && (
-                                    <p className="text-xs text-orange-400 mt-1 truncate" title={item.observacoes}>
-                                      📝 {item.observacoes}
-                                    </p>
-                                  )}
-                                  {item.previewFoto && (
-                                    <p className="text-xs text-green-400 mt-1">📷 Com foto</p>
-                                  )}
-                                </div>
-                                <div className="text-right">
-                                  <p className="font-bold text-orange-400">
-                                    R$ {item.precoTotal.toFixed(2)}
-                                  </p>
-                                  <button
-                                    onClick={() => handleRemoverDoCarrinho(item.id)}
-                                    className="text-red-400 hover:text-red-300 text-xs mt-1"
-                                  >
-                                    Remover
-                                  </button>
-                                </div>
+                      {carrinho.length === 0 ? (
+                        <div className="text-sm kv-muted">Carrinho vazio</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {carrinho.map(item => (
+                            <div key={item.id} className="flex items-center justify-between p-2 border rounded">
+                              <div>
+                                <div className="font-medium">{item.produtoNome} x{item.quantidade}</div>
+                                <div className="text-sm kv-muted">{item.categoria} • {item.tamanho} • R$ {item.precoTotal.toFixed(2)}</div>
+                                {item.observacoes && <div className="text-xs kv-muted mt-1">Obs: {item.observacoes}</div>}
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                <button className="btn btn-ghost" onClick={() => handleRemoverDoCarrinho(item.id)}>Remover</button>
                               </div>
                             </div>
                           ))}
-                        </div>
 
-                        {/* Total */}
-                        <div className="border-t border-gray-600 pt-4 mb-4">
-                          <div className="flex justify-between items-center text-lg">
-                            <span className="font-semibold">Subtotal:</span>
-                            <span className={`font-bold ${cupomAplicado ? 'line-through text-gray-500' : 'text-2xl text-green-400'}`}>
-                              R$ {totalCarrinho.toFixed(2)}
-                            </span>
+                          <div className="mt-3 font-semibold">Total: R$ {totalCarrinho.toFixed(2)}</div>
+                          <div className="mt-3 flex gap-2">
+                            <button className="btn btn-gold" onClick={handleFinalizarVenda}>Finalizar Venda</button>
+                            <button className="btn btn-ghost" onClick={() => { setCarrinho([]); setCodigoCupom(''); setCupomAplicado(null); setMessage(null); }}>Cancelar</button>
                           </div>
-                          
-                          {cupomAplicado && (
-                            <>
-                              <div className="flex justify-between items-center text-sm text-green-400 mt-1">
-                                <span>Desconto ({cupomAplicado.desconto}%):</span>
-                                <span>- R$ {cupomAplicado.valorDesconto.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between items-center text-lg mt-2">
-                                <span className="font-semibold">Total com desconto:</span>
-                                <span className="font-bold text-2xl text-green-400">
-                                  R$ {totalFinal.toFixed(2)}
-                                </span>
-                              </div>
-                            </>
-                          )}
                         </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              )}
 
-                        {/* Cupom de Desconto */}
-                        <div className="border-t border-gray-600 pt-4 mb-4">
-                          <p className="text-sm text-gray-400 mb-2">🏷️ Cupom de Desconto</p>
-                          
-                          {cupomAplicado ? (
-                            <div className="flex items-center justify-between bg-green-900/30 p-3 rounded-lg border border-green-500/30">
-                              <div>
-                                <span className="font-mono font-bold text-green-400">{cupomAplicado.codigo}</span>
-                                <span className="ml-2 text-sm text-green-300">({cupomAplicado.desconto}% OFF)</span>
-                              </div>
-                              <button
-                                onClick={handleRemoverCupom}
-                                className="text-red-400 hover:text-red-300 text-sm"
-                              >
-                                ✕ Remover
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={codigoCupom}
-                                onChange={(e) => setCodigoCupom(e.target.value.toUpperCase())}
-                                placeholder="Digite o código"
-                                className="flex-1 bg-gray-700 rounded-lg px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-orange-500"
-                              />
-                              <button
-                                onClick={handleValidarCupom}
-                                disabled={validandoCupom || !codigoCupom}
-                                className="bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50"
-                              >
-                                {validandoCupom ? "..." : "Aplicar"}
-                              </button>
-                            </div>
-                          )}
-                          
-                          {erroCupom && (
-                            <p className="text-xs text-red-400 mt-2">{erroCupom}</p>
-                          )}
+              {activeTab === 'trajetos' && (
+                <section>
+                  <h3 className="text-xl font-semibold kv-accent mb-4">Trajetos</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <div />
+                    <div className="flex gap-2">
+                      <button className="btn btn-gold" onClick={() => setShowNovoTrajeto(s => !s)}>{showNovoTrajeto ? 'Fechar' : '+ Novo Trajeto'}</button>
+                    </div>
+                  </div>
+
+                  {showNovoTrajeto && (
+                    <div className="bg-card p-4 rounded mb-4">
+                      <form onSubmit={handleCriarTrajeto} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input className="input-gold md:col-span-2" placeholder="Nome do Cliente" value={novoTrajeto.nomeCliente} onChange={e => setNovoTrajeto(s => ({ ...s, nomeCliente: e.target.value }))} />
+                        <input className="input-gold" placeholder="Cidade" value={novoTrajeto.cidade} onChange={e => setNovoTrajeto(s => ({ ...s, cidade: e.target.value }))} />
+                        <input className="input-gold" placeholder="Estado" value={novoTrajeto.estado} onChange={e => setNovoTrajeto(s => ({ ...s, estado: e.target.value }))} />
+                        <input className="input-gold md:col-span-2" placeholder="Rua" value={novoTrajeto.rua} onChange={e => setNovoTrajeto(s => ({ ...s, rua: e.target.value }))} />
+                        <input className="input-gold" placeholder="Bairro" value={novoTrajeto.bairro} onChange={e => setNovoTrajeto(s => ({ ...s, bairro: e.target.value }))} />
+                        <input className="input-gold" placeholder="CEP" value={novoTrajeto.cep} onChange={e => setNovoTrajeto(s => ({ ...s, cep: e.target.value }))} />
+                        <input className="input-gold" placeholder="Data Visita (DD/MM/AAAA)" value={novoTrajeto.dataVisita} onChange={e => setNovoTrajeto(s => ({ ...s, dataVisita: formatDateInput(e.target.value) }))} />
+                        <div className="col-span-full md:col-span-3 flex gap-2"><button className="btn btn-gold" type="submit">Criar Trajeto</button><button type="button" className="btn btn-ghost" onClick={() => setShowNovoTrajeto(false)}>Cancelar</button></div>
+                      </form>
+                    </div>
+                  )}
+
+                  {trajetos.length === 0 ? (
+                    <div className="bg-card p-4 rounded">Nenhum trajeto encontrado.</div>
+                  ) : (
+                    <div className="bg-card p-4 rounded space-y-2">
+                      {trajetos.map(t => (
+                        <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                          <div>
+                            <div className="font-medium">{t.nomeCliente}</div>
+                            <div className="text-sm kv-muted">{t.cidade} - {t.estado}</div>
+                          </div>
+                          <div className="text-sm kv-muted">{new Date(t.createdAt).toLocaleDateString()}</div>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
 
-                        {/* Botão Finalizar */}
-                        <button
-                          onClick={handleFinalizarVenda}
-                          disabled={loading || !clienteSelecionado || !novoPedido.entrega}
-                          className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                          {loading ? (
-                            "Processando..."
-                          ) : (
-                            <>
-                              <span>✅</span> Finalizar Venda e Enviar Link
-                            </>
-                          )}
-                        </button>
-                        
-                        {(!clienteSelecionado || !novoPedido.entrega) && (
-                          <p className="text-xs text-yellow-400 mt-2 text-center">
-                            {!clienteSelecionado ? "Informe o CPF do cliente" : "Preencha a data de entrega"}
-                          </p>
-                        )}
+              {activeTab === 'clientes' && (
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-semibold kv-accent">Clientes</h3>
+                    <button className="btn btn-gold" onClick={() => setShowNovoCliente(s => !s)}>{showNovoCliente ? 'Fechar' : '+ Novo Cliente'}</button>
+                  </div>
 
-                        {/* Info sobre pagamento */}
-                        <div className="mt-4 p-3 bg-blue-900/30 rounded-lg border border-blue-500/30">
-                          <p className="text-xs text-blue-300">
-                            💳 Ao finalizar, um link de pagamento será enviado via Email para o cliente com opções de PIX e Cartão de Crédito.
-                          </p>
+                  {showNovoCliente && (
+                    <div className="bg-card p-4 rounded mb-4">
+                      <form onSubmit={handleCriarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input className="input-gold" placeholder="Nome" value={novoCliente.nome} onChange={e => setNovoCliente(s => ({ ...s, nome: e.target.value }))} />
+                        <input className="input-gold" placeholder="CPF" value={novoCliente.cpf} onChange={e => setNovoCliente(s => ({ ...s, cpf: e.target.value }))} />
+                        <input className="input-gold" placeholder="Email" value={novoCliente.email} onChange={e => setNovoCliente(s => ({ ...s, email: e.target.value }))} />
+                        <input className="input-gold" placeholder="Telefone" value={novoCliente.telefone} onChange={e => setNovoCliente(s => ({ ...s, telefone: e.target.value }))} />
+                        <div className="col-span-full flex gap-2"><button className="btn btn-gold" type="submit">Criar Cliente</button><button type="button" className="btn btn-ghost" onClick={() => { setShowNovoCliente(false); setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' }); }}>Cancelar</button></div>
+                      </form>
+                    </div>
+                  )}
+
+                  {clientes.length === 0 ? (
+                    <div className="bg-card p-4 rounded">Nenhum cliente encontrado.</div>
+                  ) : (
+                    <div className="bg-card p-4 rounded space-y-2">
+                      {clientes.map(c => (
+                        <div key={c._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                          <div>
+                            <div className="font-medium">{c.nome}</div>
+                            <div className="text-sm kv-muted">{c.email} • {c.telefone}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button className="btn btn-ghost" onClick={() => abrirEdicaoCliente(c)}>Editar</button>
+                          </div>
                         </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+                      ))}
+                    </div>
+                  )}
 
-          {/* Lista de Trajetos */}
-          {activeTab === "trajetos" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Minhas Rotas</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {trajetos.map((trajeto) => (
-                  <div key={trajeto._id} className="bg-gray-800 p-4 rounded-xl">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-lg">{trajeto.nomeCliente}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(trajeto.status)}`}>
-                        {trajeto.status}
-                      </span>
+                  {/* Modal de edição */}
+                  {mostrarModalEdicao && clienteEditando && (
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+                      <div className="bg-card p-6 rounded w-full max-w-lg">
+                        <h4 className="text-lg font-semibold mb-4">Editar Cliente</h4>
+                        <form onSubmit={handleAtualizarCliente} className="grid grid-cols-1 gap-3">
+                          <input className="input-gold" placeholder="Nome" value={clienteEditando.nome} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, nome: e.target.value }) : prev)} />
+                          <input className="input-gold" placeholder="CPF" value={clienteEditando.cpf} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, cpf: e.target.value }) : prev)} />
+                          <input className="input-gold" placeholder="Email" value={clienteEditando.email} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, email: e.target.value }) : prev)} />
+                          <input className="input-gold" placeholder="Telefone" value={clienteEditando.telefone} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, telefone: e.target.value }) : prev)} />
+                          <div className="flex gap-2 mt-2">
+                            <button className="btn btn-gold" type="submit">Salvar</button>
+                            <button type="button" className="btn btn-ghost" onClick={() => { setMostrarModalEdicao(false); setClienteEditando(null); }}>Cancelar</button>
+                          </div>
+                        </form>
+                      </div>
                     </div>
-                    <p className="text-gray-400 text-sm">{trajeto.rua}, {trajeto.bairro}</p>
-                    <p className="text-gray-400 text-sm">{trajeto.cidade} - {trajeto.estado}</p>
-                    <p className="text-gray-400 text-sm">CEP: {trajeto.cep}</p>
-                    {trajeto.dataVisita && (
-                      <p className="text-orange-400 text-sm mt-2">
-                        Visita: {new Date(trajeto.dataVisita).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                ))}
-                {trajetos.length === 0 && (
-                  <p className="text-gray-400 col-span-3 text-center py-8">Nenhuma rota cadastrada</p>
-                )}
-              </div>
-            </div>
-          )}
+                  )}
+                </section>
+              )}
 
-          {/* Novo Trajeto */}
-          {activeTab === "novoTrajeto" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Cadastrar Nova Rota</h2>
-              <form onSubmit={handleCriarTrajeto} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Nome do Cliente</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.nomeCliente}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, nomeCliente: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Cidade</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.cidade}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, cidade: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Estado</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.estado}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, estado: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Rua</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.rua}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, rua: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Bairro</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.bairro}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, bairro: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">CEP</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.cep}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, cep: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Complemento</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.complemento}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, complemento: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Ponto de Referência</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.pontoReferencia}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, pontoReferencia: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Data da Visita</label>
-                    <input
-                      type="date"
-                      value={novoTrajeto.dataVisita}
-                      onChange={(e) => setNovoTrajeto({ ...novoTrajeto, dataVisita: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                >
-                  {loading ? "Cadastrando..." : "Cadastrar Rota"}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Lista de Clientes */}
-          {activeTab === "clientes" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Meus Clientes</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {clientes.map((cliente) => (
-                  <div key={cliente._id} className="bg-gray-800 p-4 rounded-xl">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-lg">{cliente.nome}</h3>
-                      <button
-                        onClick={() => abrirEdicaoCliente(cliente)}
-                        className="text-orange-400 hover:text-orange-300 text-sm px-2 py-1 bg-gray-700 rounded-lg"
-                      >
-                        ✏️ Editar
-                      </button>
-                    </div>
-                    <p className="text-gray-400 text-sm">🆔 CPF: {cliente.cpf || "Não informado"}</p>
-                    <p className="text-gray-400 text-sm">📞 {cliente.telefone}</p>
-                    {cliente.email && <p className="text-gray-400 text-sm">✉️ {cliente.email}</p>}
-                    <p className="text-gray-400 text-sm mt-2">
-                      📍 {cliente.rua}, {cliente.numero} - {cliente.bairro}
-                    </p>
-                    <p className="text-gray-400 text-sm">{cliente.cidade} - {cliente.estado}</p>
-                  </div>
-                ))}
-                {clientes.length === 0 && (
-                  <p className="text-gray-400 col-span-3 text-center py-8">Nenhum cliente cadastrado</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Modal de Edição de Cliente */}
-          {mostrarModalEdicao && clienteEditando && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-              <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-2xl font-bold">✏️ Editar Cliente</h3>
-                  <button
-                    onClick={() => {
-                      setMostrarModalEdicao(false);
-                      setClienteEditando(null);
-                    }}
-                    className="text-gray-400 hover:text-white text-2xl"
-                  >
-                    ✕
-                  </button>
-                </div>
-                
-                <form onSubmit={handleAtualizarCliente}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-sm text-gray-400 mb-1">Nome Completo</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.nome}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, nome: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">CPF</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.cpf}
-                        className="w-full bg-gray-600 rounded-lg px-4 py-2 text-gray-400 cursor-not-allowed"
-                        disabled
-                        title="CPF não pode ser alterado"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">CPF não pode ser alterado</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp)</label>
-                      <input
-                        type="tel"
-                        value={clienteEditando.telefone}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, telefone: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Email</label>
-                      <input
-                        type="email"
-                        value={clienteEditando.email || ""}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, email: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Cidade</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.cidade}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, cidade: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Estado</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.estado}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, estado: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Rua</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.rua}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, rua: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Número</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.numero}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, numero: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Bairro</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.bairro}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, bairro: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">CEP</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.cep || ""}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, cep: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Complemento</label>
-                      <input
-                        type="text"
-                        value={clienteEditando.complemento || ""}
-                        onChange={(e) => setClienteEditando({ ...clienteEditando, complemento: e.target.value })}
-                        className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-4 mt-6">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMostrarModalEdicao(false);
-                        setClienteEditando(null);
-                      }}
-                      className="flex-1 bg-gray-600 hover:bg-gray-700 py-3 rounded-lg font-semibold transition"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1 bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                    >
-                      {loading ? "Salvando..." : "💾 Salvar Alterações"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Novo Cliente */}
-          {activeTab === "novoCliente" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Cadastrar Novo Cliente</h2>
-              <form onSubmit={handleCriarCliente} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Nome Completo *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.nome}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, nome: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">CPF *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.cpf}
-                      onChange={(e) => {
-                        const cpfFormatado = formatarCPF(e.target.value);
-                        setNovoCliente({ ...novoCliente, cpf: cpfFormatado });
-                        // Validar CPF em tempo real quando tiver 14 caracteres (formato completo)
-                        if (cpfFormatado.length === 14) {
-                          if (!validarCPF(cpfFormatado)) {
-                            setErroValidacaoCPF("CPF inválido!");
-                          } else {
-                            setErroValidacaoCPF(null);
-                          }
-                        } else {
-                          setErroValidacaoCPF(null);
-                        }
-                      }}
-                      className={`w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 ${
-                        erroValidacaoCPF ? "ring-2 ring-red-500 focus:ring-red-500" : "focus:ring-orange-500"
-                      }`}
-                      placeholder="000.000.000-00"
-                      maxLength={14}
-                      required
-                    />
-                    {erroValidacaoCPF && (
-                      <p className="text-xs text-red-500 mt-1">❌ {erroValidacaoCPF}</p>
-                    )}
-                    {novoCliente.cpf.length === 14 && !erroValidacaoCPF && (
-                      <p className="text-xs text-green-500 mt-1">✅ CPF válido</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp) *</label>
-                    <input
-                      type="tel"
-                      value={novoCliente.telefone}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, telefone: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="(00) 00000-0000"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Links de pagamento serão enviados para este número</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={novoCliente.email}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, email: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Cidade *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.cidade}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, cidade: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Estado *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.estado}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, estado: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Rua *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.rua}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, rua: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Número *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.numero}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, numero: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Bairro *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.bairro}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, bairro: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">CEP</label>
-                    <input
-                      type="text"
-                      value={novoCliente.cep}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, cep: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Complemento</label>
-                    <input
-                      type="text"
-                      value={novoCliente.complemento}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, complemento: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                >
-                  {loading ? "Cadastrando..." : "Cadastrar Cliente"}
-                </button>
-              </form>
-            </div>
-          )}
-        </main>
-      </div>
-    </div>
-  );
-}
+             </main>
+           </div>
+         </div>
+       </div>
+     </div>
+   );
+ }
 

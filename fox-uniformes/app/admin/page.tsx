@@ -2,6 +2,10 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "../config/api";
+// Header is provided by the global layout; do not import Header/Sidebar here to avoid duplicate header and unused-import warnings.
+
+import Button from "../components/Button";
+import Sidebar from "../components/Sidebar";
 
 // Tipos
 interface UserData {
@@ -11,6 +15,14 @@ interface UserData {
   name?: string;
 }
 
+interface Categoria {
+  _id: string;
+  name: string;
+  descricao?: string;
+  ativo: boolean;
+  createdAt: string;
+}
+
 interface Produto {
   _id: string;
   name: string;
@@ -18,14 +30,6 @@ interface Produto {
   categoria: Categoria | string;
   descricao: string;
   imagem?: string;
-}
-
-interface Categoria {
-  _id: string;
-  name: string;
-  descricao?: string;
-  ativo: boolean;
-  createdAt: string;
 }
 
 interface Cliente {
@@ -95,7 +99,20 @@ interface Cupom {
   createdAt: string;
 }
 
-type TabType = "dashboard" | "pedidos" | "vendedores" | "produtos" | "clientes" | "trajetos" | "novoVendedor" | "novoProduto" | "cupons" | "novoCupom" | "novoCliente" | "categorias" | "novaCategoria";
+type TabType =
+  | "dashboard"
+  | "pedidos"
+  | "vendedores"
+  | "produtos"
+  | "clientes"
+  | "trajetos"
+  | "novoVendedor"
+  | "novoProduto"
+  | "cupons"
+  | "novoCupom"
+  | "novoCliente"
+  | "categorias"
+  | "novaCategoria";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -113,6 +130,10 @@ export default function AdminDashboardPage() {
   const [cupons, setCupons] = useState<Cupom[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
 
+  // Trajetos - novo estado para criação rápida
+  const [showNovoTrajeto, setShowNovoTrajeto] = useState(false);
+  const [novoTrajeto, setNovoTrajeto] = useState({ nomeCliente: "", cidade: "", estado: "", rua: "", bairro: "", cep: "", dataVisita: "" });
+
   // Estados para formulários
   const [novoVendedor, setNovoVendedor] = useState({
     name: "",
@@ -124,11 +145,13 @@ export default function AdminDashboardPage() {
     password: "",
     confirmPassword: "",
   });
+  const [editVendedorId, setEditVendedorId] = useState<string | null>(null);
 
   const [novoProduto, setNovoProduto] = useState({
     name: "",
     descricao: "",
-    preco: 0,
+    // armazenamos como string durante a edição para evitar prefixo 0 indesejado
+    preco: "",
     categoria: "",
   });
 
@@ -141,10 +164,7 @@ export default function AdminDashboardPage() {
     notificarClientes: true,
   });
 
-  const [novaCategoria, setNovaCategoria] = useState({
-    name: "",
-    descricao: "",
-  });
+  const [novaCategoria, setNovaCategoria] = useState({ name: "", descricao: "" });
 
   const [novoCliente, setNovoCliente] = useState({
     nome: "",
@@ -159,6 +179,7 @@ export default function AdminDashboardPage() {
     cep: "",
     complemento: "",
   });
+  const [editClienteId, setEditClienteId] = useState<string | null>(null);
 
   const [erroValidacaoCPF, setErroValidacaoCPF] = useState<string | null>(null);
 
@@ -169,7 +190,7 @@ export default function AdminDashboardPage() {
   const getToken = () => localStorage.getItem("token");
 
   const getAuthHeaders = () => ({
-    "Authorization": `Bearer ${getToken()}`,
+    Authorization: `Bearer ${getToken()}`,
     "Content-Type": "application/json",
   });
 
@@ -216,11 +237,8 @@ export default function AdminDashboardPage() {
     fetchUserData();
   }, [router]);
 
-  // Carregar dados quando o usuário estiver autenticado
   useEffect(() => {
-    if (userData) {
-      fetchAllData();
-    }
+    if (userData) fetchAllData();
   }, [userData]);
 
   const fetchAllData = () => {
@@ -233,106 +251,70 @@ export default function AdminDashboardPage() {
     fetchCategorias();
   };
 
-  // Funções para buscar dados (TODOS, não apenas do vendedor)
   const fetchPedidos = async () => {
     try {
-      const response = await fetch(`${API_URL}/pedidos`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setPedidos(data);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar pedidos:", error);
+      const response = await fetch(`${API_URL}/pedidos`, { headers: getAuthHeaders() });
+      if (response.ok) setPedidos(await response.json());
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const fetchTrajetos = async () => {
     try {
-      const response = await fetch(`${API_URL}/trajetos`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTrajetos(data);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar trajetos:", error);
+      const response = await fetch(`${API_URL}/trajetos`, { headers: getAuthHeaders() });
+      if (response.ok) setTrajetos(await response.json());
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const fetchClientes = async () => {
     try {
-      const response = await fetch(`${API_URL}/clientes`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setClientes(data);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar clientes:", error);
+      const response = await fetch(`${API_URL}/clientes`, { headers: getAuthHeaders() });
+      if (response.ok) setClientes(await response.json());
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const fetchProdutos = async () => {
     try {
-      const response = await fetch(`${API_URL}/produtos`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setProdutos(data);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar produtos:", error);
+      const response = await fetch(`${API_URL}/produtos`, { headers: getAuthHeaders() });
+      if (response.ok) setProdutos(await response.json());
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const fetchVendedores = async () => {
     try {
-      const response = await fetch(`${API_URL}/users`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setVendedores(data.filter((u: Vendedor) => u.role === "vendedor"));
-      }
-    } catch (error) {
-      console.error("Erro ao buscar vendedores:", error);
+      const response = await fetch(`${API_URL}/users`, { headers: getAuthHeaders() });
+      if (response.ok) setVendedores((await response.json()).filter((u: Vendedor) => u.role === "vendedor"));
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const fetchCupons = async () => {
     try {
-      const response = await fetch(`${API_URL}/cupons`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCupons(data);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar cupons:", error);
+      const response = await fetch(`${API_URL}/cupons`, { headers: getAuthHeaders() });
+      if (response.ok) setCupons(await response.json());
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const fetchCategorias = async () => {
     try {
-      const response = await fetch(`${API_URL}/categorias`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCategorias(data);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar categorias:", error);
+      const response = await fetch(`${API_URL}/categorias`, { headers: getAuthHeaders() });
+      if (response.ok) setCategorias(await response.json());
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  // Função para atualizar status do pedido
+  // Helpers e handlers (únicos, sem duplicação)
   const handleUpdatePedidoStatus = async (pedidoId: string, novoStatus: string) => {
     try {
       const response = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
@@ -340,1559 +322,720 @@ export default function AdminDashboardPage() {
         headers: getAuthHeaders(),
         body: JSON.stringify({ status: novoStatus }),
       });
-
       if (response.ok) {
         setMessage({ type: "success", text: `Pedido atualizado para "${novoStatus}"` });
         fetchPedidos();
-      } else {
-        setMessage({ type: "error", text: "Erro ao atualizar pedido" });
-      }
-    } catch (error) {
+      } else setMessage({ type: "error", text: "Erro ao atualizar pedido" });
+    } catch (err) {
       setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
     }
   };
 
-  // Função para criar vendedor
   const handleCriarVendedor = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
-
-    if (novoVendedor.password !== novoVendedor.confirmPassword) {
-      setMessage({ type: "error", text: "As senhas não coincidem" });
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_URL}/users`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
+    // Se estivermos em modo de edição, atualiza via PUT
+    if (editVendedorId) {
+      try {
+        // se senha informada, checar confirmação
+        if (novoVendedor.password && novoVendedor.password !== novoVendedor.confirmPassword) {
+          setMessage({ type: 'error', text: 'As senhas não coincidem' });
+          setLoading(false);
+          return;
+        }
+        const payload: any = {
           name: novoVendedor.name,
           login: novoVendedor.login,
           email: novoVendedor.email,
           telefone: novoVendedor.telefone,
           endereco: novoVendedor.endereco,
-          dataNascimento: novoVendedor.dataNascimento,
-          password: novoVendedor.password,
-          role: "vendedor",
-        }),
-      });
+          dataNascimento: novoVendedor.dataNascimento || undefined,
+        };
+        if (novoVendedor.password) payload.password = novoVendedor.password;
 
-      if (response.ok) {
-        setMessage({ type: "success", text: "Vendedor cadastrado com sucesso!" });
-        setNovoVendedor({
-          name: "",
-          login: "",
-          email: "",
-          telefone: "",
-          endereco: "",
-          dataNascimento: "",
-          password: "",
-          confirmPassword: "",
+        const response = await fetch(`${API_URL}/users/${editVendedorId}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
         });
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Vendedor atualizado com sucesso!' });
+          setNovoVendedor({ name: '', login: '', email: '', telefone: '', endereco: '', dataNascimento: '', password: '', confirmPassword: '' });
+          setEditVendedorId(null);
+          fetchVendedores();
+          setActiveTab('vendedores');
+        } else {
+          const error = await response.json();
+          setMessage({ type: 'error', text: error.error || 'Erro ao atualizar vendedor' });
+        }
+      } catch (err) {
+        setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // modo criação
+    if (novoVendedor.password !== novoVendedor.confirmPassword) {
+      setMessage({ type: 'error', text: 'As senhas não coincidem' });
+      setLoading(false);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/users`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ ...novoVendedor, role: 'vendedor' }),
+      });
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Vendedor cadastrado com sucesso!' });
+        setNovoVendedor({ name: '', login: '', email: '', telefone: '', endereco: '', dataNascimento: '', password: '', confirmPassword: '' });
         fetchVendedores();
-        setActiveTab("vendedores");
+        setActiveTab('vendedores');
       } else {
         const error = await response.json();
-        setMessage({ type: "error", text: error.error || "Erro ao cadastrar vendedor" });
+        setMessage({ type: 'error', text: error.error || 'Erro ao cadastrar vendedor' });
       }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para criar produto
+  // Abrir formulário de vendedor pré-preenchido para edição
+  const handleEditarVendedor = (v: Vendedor) => {
+    setNovoVendedor({
+      name: v.name || '',
+      login: (v as any).login || '',
+      email: v.email || '',
+      telefone: v.telefone || '',
+      endereco: (v as any).endereco || '',
+      dataNascimento: (v as any).dataNascimento || '',
+      password: '',
+      confirmPassword: '',
+    });
+    setEditVendedorId(v._id);
+    setActiveTab('novoVendedor');
+  };
+
+  const handleAbrirEditarProduto = (produto: Produto) => {
+    // Preenche o formulário de criação com os dados do produto e abre a aba de criação/edição
+    setEditProdutoId(produto._id);
+    setNovoProduto({
+      name: produto.name || '',
+      descricao: produto.descricao || '',
+      preco: produto.preco != null ? String(produto.preco) : '',
+      categoria: typeof produto.categoria === 'object' ? (produto.categoria as any)._id : (produto.categoria as string) || '',
+    });
+    setActiveTab('novoProduto');
+  };
+
   const handleCriarProduto = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
-
     try {
-      const response = await fetch(`${API_URL}/produtos`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(novoProduto),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Produto cadastrado com sucesso!" });
-        setNovoProduto({ name: "", descricao: "", preco: 0, categoria: "" });
-        fetchProdutos();
-        setActiveTab("produtos");
+      const payload: any = { ...novoProduto, preco: Number(novoProduto.preco || 0) };
+      // Se estivermos em edição, faz PUT
+      if (editProdutoId) {
+        const response = await fetch(`${API_URL}/produtos/${editProdutoId}`, { method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Produto atualizado com sucesso!' });
+          setNovoProduto({ name: '', descricao: '', preco: '', categoria: '' });
+          setEditProdutoId(null);
+          fetchProdutos();
+          setActiveTab('produtos');
+        } else {
+          const error = await response.json();
+          setMessage({ type: 'error', text: error.error || 'Erro ao atualizar produto' });
+        }
       } else {
-        const error = await response.json();
-        setMessage({ type: "error", text: error.error || "Erro ao cadastrar produto" });
+        const response = await fetch(`${API_URL}/produtos`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Produto cadastrado com sucesso!' });
+          setNovoProduto({ name: '', descricao: '', preco: '', categoria: '' });
+          fetchProdutos();
+          setActiveTab('produtos');
+        } else {
+          const error = await response.json();
+          setMessage({ type: 'error', text: error.error || 'Erro ao cadastrar produto' });
+        }
       }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para editar produto
-  const handleAbrirEditarProduto = (produto: Produto) => {
-    setEditProdutoId(produto._id);
-    setEditProdutoData({ ...produto });
-    setEditModalOpen(true);
-  };
-
-  const handleSalvarEdicaoProduto = async () => {
-    if (!editProdutoId || !editProdutoData) return;
-    // Garante que categoria seja sempre o _id
-    const categoriaId = typeof editProdutoData.categoria === 'object' ? editProdutoData.categoria._id : editProdutoData.categoria;
-    const produtoCorrigido = { ...editProdutoData, categoria: categoriaId };
-    console.log('Payload enviado ao backend:', produtoCorrigido); // debug
-    try {
-      const response = await fetch(`${API_URL}/produtos/${editProdutoId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(produtoCorrigido),
-      });
-      if (response.ok) {
-        setEditModalOpen(false);
-        setEditProdutoId(null);
-        setEditProdutoData(null);
-        fetchProdutos();
-      } else {
-        alert("Erro ao salvar edição do produto.");
-      }
-    } catch (err) {
-      alert("Erro ao conectar com o servidor.");
-    }
-  };
-
-  // Função para deletar vendedor
   const handleDeletarVendedor = async (vendedorId: string) => {
     if (!confirm("Tem certeza que deseja excluir este vendedor?")) return;
-
     try {
-      const response = await fetch(`${API_URL}/users/${vendedorId}`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Vendedor excluído com sucesso!" });
-        fetchVendedores();
-      } else {
-        setMessage({ type: "error", text: "Erro ao excluir vendedor" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    }
+      const response = await fetch(`${API_URL}/users/${vendedorId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (response.ok) { setMessage({ type: "success", text: "Vendedor excluído com sucesso!" }); fetchVendedores(); } else setMessage({ type: "error", text: "Erro ao excluir vendedor" });
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
   };
 
-  // Função para deletar produto
   const handleDeletarProduto = async (produtoId: string) => {
     if (!confirm("Tem certeza que deseja excluir este produto?")) return;
+    try {
+      const response = await fetch(`${API_URL}/produtos/${produtoId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (response.ok) { setMessage({ type: "success", text: "Produto excluído com sucesso!" }); fetchProdutos(); } else setMessage({ type: "error", text: "Erro ao excluir produto" });
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
+  };
+
+  const handleToggleCupom = async (cupomId: string, ativo: boolean) => {
+    try {
+      const endpoint = ativo ? "desativar" : "ativar";
+      const response = await fetch(`${API_URL}/cupons/${cupomId}/${endpoint}`, { method: "PUT", headers: getAuthHeaders() });
+      if (response.ok) { setMessage({ type: "success", text: `Cupom ${ativo ? "desativado" : "ativado"} com sucesso!` }); fetchCupons(); } else setMessage({ type: "error", text: "Erro ao atualizar cupom" });
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
+  };
+
+  const handleDeletarCupom = async (cupomId: string) => {
+    if (!confirm("Tem certeza que deseja excluir este cupom?")) return;
+    try {
+      const response = await fetch(`${API_URL}/cupons/${cupomId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (response.ok) { setMessage({ type: "success", text: "Cupom excluído com sucesso!" }); fetchCupons(); } else setMessage({ type: "error", text: "Erro ao excluir cupom" });
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
+  };
+
+  const handleCriarTrajeto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+
+    // helper: converte DD/MM/YYYY para YYYY-MM-DD. Retorna null se formato inválido.
+    const parseDateToISO = (dateStr: string) => {
+      if (!dateStr) return null;
+      const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (isoMatch) return dateStr; // já no formato ISO
+      const brMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (brMatch) {
+        const [, dd, mm, yyyy] = brMatch;
+        return `${yyyy}-${mm}-${dd}`;
+      }
+      return null;
+    };
 
     try {
-      const response = await fetch(`${API_URL}/produtos/${produtoId}`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Produto excluído com sucesso!" });
-        fetchProdutos();
-      } else {
-        setMessage({ type: "error", text: "Erro ao excluir produto" });
+      // validação e conversão da data no formato brasileiro
+      const payload: any = { ...novoTrajeto, vendedorId: userData?.id };
+      if (novoTrajeto.dataVisita) {
+        const iso = parseDateToISO(novoTrajeto.dataVisita);
+        if (!iso) {
+          setMessage({ type: 'error', text: 'Formato de data inválido. Use DD/MM/YYYY.' });
+          setLoading(false);
+          return;
+        }
+        payload.dataVisita = iso;
       }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    }
+
+      const response = await fetch(`${API_URL}/trajetos`, { method: "POST", headers: getAuthHeaders(), body: JSON.stringify(payload) });
+      if (response.ok) { setMessage({ type: "success", text: "Trajeto criado com sucesso!" }); setNovoTrajeto({ nomeCliente: "", cidade: "", estado: "", rua: "", bairro: "", cep: "", dataVisita: "" }); setShowNovoTrajeto(false); fetchTrajetos(); } else { const err = await response.json(); setMessage({ type: "error", text: err.error || "Erro ao criar trajeto" }); }
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); } finally { setLoading(false); }
   };
 
-  // Função para formatar CPF
+  const handleDeletarTrajeto = async (trajetoId: string) => {
+    if (!confirm("Tem certeza que deseja excluir este trajeto?")) return;
+    try {
+      const response = await fetch(`${API_URL}/trajetos/${trajetoId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (response.ok) { setMessage({ type: "success", text: "Trajeto excluído com sucesso!" }); fetchTrajetos(); } else setMessage({ type: "error", text: "Erro ao excluir trajeto" });
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
+  };
+
   const formatarCPF = (valor: string) => {
     const numeros = valor.replace(/\D/g, "");
-    return numeros
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
-      .substring(0, 14);
+    return numeros.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/,"$1-$2").substring(0, 14);
   };
 
-  // Função para validar CPF (algoritmo oficial)
   const validarCPF = (cpf: string): boolean => {
     const cpfLimpo = cpf.replace(/\D/g, "");
-    
     if (cpfLimpo.length !== 11) return false;
     if (/^(\d)\1+$/.test(cpfLimpo)) return false;
-    
     let soma = 0;
-    for (let i = 0; i < 9; i++) {
-      soma += parseInt(cpfLimpo.charAt(i)) * (10 - i);
-    }
+    for (let i = 0; i < 9; i++) soma += parseInt(cpfLimpo.charAt(i)) * (10 - i);
     let resto = (soma * 10) % 11;
     if (resto === 10 || resto === 11) resto = 0;
     if (resto !== parseInt(cpfLimpo.charAt(9))) return false;
-    
     soma = 0;
-    for (let i = 0; i < 10; i++) {
-      soma += parseInt(cpfLimpo.charAt(i)) * (11 - i);
-    }
+    for (let i = 0; i < 10; i++) soma += parseInt(cpfLimpo.charAt(i)) * (11 - i);
     resto = (soma * 10) % 11;
     if (resto === 10 || resto === 11) resto = 0;
     if (resto !== parseInt(cpfLimpo.charAt(10))) return false;
-    
     return true;
   };
 
-  // Função para criar cliente
   const handleCriarCliente = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
-
-    if (!validarCPF(novoCliente.cpf)) {
-      setMessage({ type: "error", text: "CPF inválido! Por favor, verifique o número." });
-      setLoading(false);
-      return;
-    }
-
+    if (!validarCPF(novoCliente.cpf)) { setMessage({ type: 'error', text: 'CPF inválido! Por favor, verifique o número.' }); setLoading(false); return; }
     try {
-      const response = await fetch(`${API_URL}/clientes`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          ...novoCliente,
-          cpf: novoCliente.cpf.replace(/\D/g, ""),
-          vendedorId: userData?.id,
-        }),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Cliente cadastrado com sucesso!" });
-        setNovoCliente({ nome: "", cpf: "", email: "", telefone: "", cidade: "", estado: "", rua: "", numero: "", bairro: "", cep: "", complemento: "" });
-        setErroValidacaoCPF(null);
-        fetchClientes();
-        setActiveTab("clientes");
+      const payload = { ...novoCliente, cpf: novoCliente.cpf.replace(/\D/g, '') };
+      if (editClienteId) {
+        // Edição
+        const response = await fetch(`${API_URL}/clientes/${editClienteId}`, { method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Cliente atualizado com sucesso!' });
+          setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' });
+          setEditClienteId(null);
+          setErroValidacaoCPF(null);
+          fetchClientes();
+          setActiveTab('clientes');
+        } else {
+          const error = await response.json();
+          setMessage({ type: 'error', text: error.error || 'Erro ao atualizar cliente' });
+        }
       } else {
-        const error = await response.json();
-        setMessage({ type: "error", text: error.error || "Erro ao cadastrar cliente" });
+        // Criação
+        const response = await fetch(`${API_URL}/clientes`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ ...payload, vendedorId: userData?.id }) });
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Cliente cadastrado com sucesso!' });
+          setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' });
+          setErroValidacaoCPF(null);
+          fetchClientes();
+          setActiveTab('clientes');
+        } else {
+          const error = await response.json();
+          setMessage({ type: 'error', text: error.error || 'Erro ao cadastrar cliente' });
+        }
       }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para criar cupom
+  const handleEditarCliente = (c: Cliente) => {
+    const clienteAny = c as any;
+    setNovoCliente({
+      nome: clienteAny.nome || '',
+      cpf: clienteAny.cpf || '',
+      email: clienteAny.email || '',
+      telefone: clienteAny.telefone || '',
+      cidade: clienteAny.cidade || '',
+      estado: clienteAny.estado || '',
+      rua: clienteAny.rua || '',
+      numero: clienteAny.numero || '',
+      bairro: clienteAny.bairro || '',
+      cep: clienteAny.cep || '',
+      complemento: clienteAny.complemento || '',
+    });
+    setEditClienteId(c._id);
+    setActiveTab('novoCliente');
+  };
+
   const handleCriarCupom = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
-
     try {
-      const response = await fetch(`${API_URL}/cupons`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          codigo: novoCupom.codigo,
-          desconto: novoCupom.desconto,
-          valorMinimo: novoCupom.valorMinimo || 0,
-          dataValidade: novoCupom.dataValidade || null,
-          usoMaximo: novoCupom.usoMaximo ? parseInt(novoCupom.usoMaximo) : null,
-          criadoPor: userData?.id,
-          notificarClientes: novoCupom.notificarClientes,
-        }),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Cupom criado com sucesso! Clientes serão notificados através do Email cadastrado." });
-        setNovoCupom({
-          codigo: "",
-          desconto: 10,
-          valorMinimo: 0,
-          dataValidade: "",
-          usoMaximo: "",
-          notificarClientes: true,
-        });
-        fetchCupons();
-        setActiveTab("cupons");
-      } else {
-        const error = await response.json();
-        setMessage({ type: "error", text: error.error || "Erro ao criar cupom" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    } finally {
-      setLoading(false);
-    }
+      const response = await fetch(`${API_URL}/cupons`, { method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ codigo: novoCupom.codigo, desconto: novoCupom.desconto, valorMinimo: novoCupom.valorMinimo || 0, dataValidade: novoCupom.dataValidade || null, usoMaximo: novoCupom.usoMaximo ? parseInt(String(novoCupom.usoMaximo)) : null, criadoPor: userData?.id, notificarClientes: novoCupom.notificarClientes }) });
+      if (response.ok) { setMessage({ type: "success", text: "Cupom criado com sucesso! Clientes serão notificados através do Email cadastrado." }); setNovoCupom({ codigo: "", desconto: 10, valorMinimo: 0, dataValidade: "", usoMaximo: "", notificarClientes: true }); fetchCupons(); setActiveTab("cupons"); } else { const error = await response.json(); setMessage({ type: "error", text: error.error || "Erro ao criar cupom" }); }
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); } finally { setLoading(false); }
   };
 
-  // Função para ativar/desativar cupom
-  const handleToggleCupom = async (cupomId: string, ativo: boolean) => {
-    try {
-      const endpoint = ativo ? "desativar" : "ativar";
-      const response = await fetch(`${API_URL}/cupons/${cupomId}/${endpoint}`, {
-        method: "PUT",
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: `Cupom ${ativo ? "desativado" : "ativado"} com sucesso!` });
-        fetchCupons();
-      } else {
-        setMessage({ type: "error", text: "Erro ao atualizar cupom" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    }
-  };
-
-  // Função para deletar cupom
-  const handleDeletarCupom = async (cupomId: string) => {
-    if (!confirm("Tem certeza que deseja excluir este cupom?")) return;
-
-    try {
-      const response = await fetch(`${API_URL}/cupons/${cupomId}`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Cupom excluído com sucesso!" });
-        fetchCupons();
-      } else {
-        setMessage({ type: "error", text: "Erro ao excluir cupom" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    }
-  };
-
-  // Função para reenviar notificação do cupom
-  const handleReenviarNotificacao = async (cupomId: string) => {
-    if (!confirm("Enviar notificação deste cupom para todos os clientes?")) return;
-
-    try {
-      const response = await fetch(`${API_URL}/cupons/${cupomId}/reenviar`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMessage({ type: "success", text: `Notificações enviadas: ${data.enviados} sucesso, ${data.erros} erros` });
-      } else {
-        setMessage({ type: "error", text: "Erro ao enviar notificações" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    }
-  };
-
-  // Função para criar categoria
-  const handleCriarCategoria = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      const response = await fetch(`${API_URL}/categorias`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(novaCategoria),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Categoria criada com sucesso!" });
-        setNovaCategoria({ name: "", descricao: "" });
-        fetchCategorias();
-        setActiveTab("categorias");
-      } else {
-        const error = await response.json();
-        setMessage({ type: "error", text: error.error || "Erro ao criar categoria" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Função para ativar/desativar categoria
   const handleToggleCategoria = async (categoriaId: string, ativo: boolean) => {
     try {
-      const response = await fetch(`${API_URL}/categorias/${categoriaId}`, {
-        method: "PUT",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ ativo: !ativo }),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: `Categoria ${ativo ? "desativada" : "ativada"} com sucesso!` });
-        fetchCategorias();
-      } else {
-        setMessage({ type: "error", text: "Erro ao atualizar categoria" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    }
+      const response = await fetch(`${API_URL}/categorias/${categoriaId}`, { method: "PUT", headers: getAuthHeaders(), body: JSON.stringify({ ativo: !ativo }) });
+      if (response.ok) { setMessage({ type: "success", text: `Categoria ${ativo ? "desativada" : "ativada"} com sucesso!` }); fetchCategorias(); } else setMessage({ type: "error", text: "Erro ao atualizar categoria" });
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
   };
 
-  // Função para deletar categoria
   const handleDeletarCategoria = async (categoriaId: string) => {
     if (!confirm("Tem certeza que deseja excluir esta categoria? Produtos vinculados podem ser afetados.")) return;
-
-    try {
-      const response = await fetch(`${API_URL}/categorias/${categoriaId}`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-
-      if (response.ok) {
-        setMessage({ type: "success", text: "Categoria excluída com sucesso!" });
-        fetchCategorias();
-      } else {
-        setMessage({ type: "error", text: "Erro ao excluir categoria" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Erro ao conectar com o servidor" });
-    }
+    try { const response = await fetch(`${API_URL}/categorias/${categoriaId}`, { method: "DELETE", headers: getAuthHeaders() }); if (response.ok) { setMessage({ type: "success", text: "Categoria excluída com sucesso!" }); fetchCategorias(); } else setMessage({ type: "error", text: "Erro ao excluir categoria" }); } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/");
-  };
+  const handleLogout = () => { localStorage.removeItem("token"); router.push("/"); };
 
-  // Função para obter cor do status
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Pendente": return "bg-yellow-500";
+      case "Pendente":
+        return "bg-yellow-500";
       case "Em Progresso":
-      case "Em Andamento": return "bg-blue-500";
-      case "Em Trânsito": return "bg-indigo-500";
-      case "Concluído": return "bg-green-500";
-      case "Cancelado": return "bg-red-500";
-      case "Aguardando Pagamento": return "bg-purple-500";
-      default: return "bg-gray-500";
+      case "Em Andamento":
+        return "bg-blue-500";
+      case "Em Trânsito":
+        return "bg-indigo-500";
+      case "Concluído":
+        return "bg-green-500";
+      case "Cancelado":
+        return "bg-red-500";
+      case "Aguardando Pagamento":
+        return "bg-purple-500";
+      default:
+        return "bg-gray-500";
     }
   };
 
-  // Pedidos ativos (excluindo cancelados)
-  const pedidosAtivos = pedidos.filter(p => p.status !== "Cancelado");
+  // Filtragem
+  const pedidosAtivos = pedidos.filter((p) => p.status !== "Cancelado");
+  const pedidosNaoCancelados = pedidosAtivos;
+  const pedidosPendentes = pedidosNaoCancelados.filter((p) => p.status === "Pendente").length;
+  const pedidosEmProgresso = pedidosNaoCancelados.filter((p) => p.status === "Em Progresso").length;
+  const pedidosConcluidos = pedidosNaoCancelados.filter((p) => p.status === "Concluído").length;
+  const faturamentoTotal = pedidosNaoCancelados.filter((p) => p.status === "Concluído").reduce((acc, p) => acc + (p.preco || 0), 0);
 
-  // Estatísticas (usando pedidos ativos)
-  const pedidosPendentes = pedidosAtivos.filter(p => p.status === "Pendente").length;
-  const pedidosEmProgresso = pedidosAtivos.filter(p => p.status === "Em Progresso").length;
-  const pedidosConcluidos = pedidos.filter(p => p.status === "Concluído").length;
-  const faturamentoTotal = pedidos.filter(p => p.status === "Concluído").reduce((acc, p) => acc + (p.preco || 0), 0);
-
-  if (!userData) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <div className="text-white text-xl">Carregando...</div>
-      </div>
-    );
-  }
+  if (!userData) return (
+    <div className="flex items-center justify-center min-h-screen bg-app text-app"><div className="text-app text-xl">Carregando...</div></div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="bg-gray-800 shadow-lg border-b border-orange-500">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-orange-500">Fox Uniformes</h1>
-            <span className="bg-orange-600 text-xs px-2 py-1 rounded-full">ADMIN</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-300">Olá, {userData.login}</span>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-gray-800 min-h-screen p-4">
-          <nav className="space-y-2">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "dashboard" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              📊 Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab("pedidos")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "pedidos" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              📦 Gerenciar Pedidos
-              {pedidosPendentes > 0 && (
-                <span className="ml-2 bg-yellow-500 text-xs px-2 py-1 rounded-full">{pedidosPendentes}</span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("vendedores")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "vendedores" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              👤 Vendedores
-            </button>
-            <button
-              onClick={() => setActiveTab("novoVendedor")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoVendedor" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              ➕ Novo Vendedor
-            </button>
-            <button
-              onClick={() => setActiveTab("produtos")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "produtos" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              🏷️ Produtos
-            </button>
-            <button
-              onClick={() => setActiveTab("novoProduto")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoProduto" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              ➕ Novo Produto
-            </button>
-            <button
-              onClick={() => setActiveTab("categorias")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "categorias" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              📂 Categorias
-              {categorias.length > 0 && (
-                <span className="ml-2 bg-purple-500 text-xs px-2 py-1 rounded-full">{categorias.length}</span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("novaCategoria")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novaCategoria" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              ➕ Nova Categoria
-            </button>
-            <button
-              onClick={() => setActiveTab("clientes")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "clientes" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              👥 Todos Clientes
-            </button>
-            <button
-              onClick={() => setActiveTab("novoCliente")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoCliente" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              ➕ Novo Cliente
-            </button>
-            <button
-              onClick={() => setActiveTab("trajetos")}
-              className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "trajetos" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-            >
-              🗺️ Todas Rotas
-            </button>
-            
-            {/* Seção de Cupons */}
-            <div className="border-t border-gray-700 mt-4 pt-4">
-              <p className="text-xs text-gray-500 uppercase mb-2 px-4">Marketing</p>
-              <button
-                onClick={() => setActiveTab("cupons")}
-                className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "cupons" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-              >
-                🏷️ Cupons de Desconto
-                {cupons.filter(c => c.ativo).length > 0 && (
-                  <span className="ml-2 bg-green-500 text-xs px-2 py-1 rounded-full">{cupons.filter(c => c.ativo).length}</span>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab("novoCupom")}
-                className={`w-full text-left px-4 py-3 rounded-lg transition ${activeTab === "novoCupom" ? "bg-orange-600" : "hover:bg-gray-700"}`}
-              >
-                ➕ Novo Cupom
-              </button>
-            </div>
-          </nav>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-8">
-          {/* Mensagem de feedback */}
-          {message && (
-            <div className={`mb-4 p-4 rounded-lg ${message.type === "success" ? "bg-green-600" : "bg-red-600"}`}>
-              {message.text}
-            </div>
-          )}
-
-          {/* Dashboard Principal */}
-          {activeTab === "dashboard" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Painel Administrativo</h2>
-              
-              {/* Cards de Estatísticas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-yellow-500">
-                  <h3 className="text-lg text-gray-400">Pedidos Pendentes</h3>
-                  <p className="text-4xl font-bold text-yellow-500">{pedidosPendentes}</p>
+    <div className="min-h-screen bg-app text-app">
+      <div className="container-responsive grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
+        <div className="lg:col-span-3"><div className="sticky top-6"><Sidebar active={activeTab} onChange={(t: TabType) => setActiveTab(t)} /></div></div>
+        <div className="lg:col-span-9">
+          <main className="space-y-6 p-4">
+            {message && <div className={`mb-4 p-4 rounded-lg ${message.type === "success" ? "bg-green-700/30" : "bg-red-700/30"}`}>{message.text}</div>}
+            <section>
+              <h2 className="text-3xl font-bold mb-4 kv-accent">Painel Administrativo</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent)' }}>
+                  <h3 className="text-lg kv-muted">Pedidos Pendentes</h3>
+                  <p className="text-4xl font-bold kv-accent">{pedidosPendentes}</p>
                 </div>
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-blue-500">
-                  <h3 className="text-lg text-gray-400">Em Progresso</h3>
-                  <p className="text-4xl font-bold text-blue-500">{pedidosEmProgresso}</p>
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent-2)' }}>
+                  <h3 className="text-lg kv-muted">Em Progresso</h3>
+                  <p className="text-4xl font-bold kv-accent">{pedidosEmProgresso}</p>
                 </div>
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-green-500">
-                  <h3 className="text-lg text-gray-400">Concluídos</h3>
-                  <p className="text-4xl font-bold text-green-500">{pedidosConcluidos}</p>
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'rgba(34,197,94,0.8)' }}>
+                  <h3 className="text-lg kv-muted">Concluídos</h3>
+                  <p className="text-4xl font-bold text-success">{pedidosConcluidos}</p>
                 </div>
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-orange-500">
-                  <h3 className="text-lg text-gray-400">Faturamento</h3>
-                  <p className="text-3xl font-bold text-orange-500">R$ {faturamentoTotal.toFixed(2)}</p>
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent-2)' }}>
+                  <h3 className="text-lg kv-muted">Faturamento</h3>
+                  <p className="text-3xl font-bold kv-accent">R$ {faturamentoTotal.toFixed(2)}</p>
                 </div>
               </div>
+            </section>
 
-              {/* Segunda linha de estatísticas */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
-                  <h3 className="text-lg text-gray-400">Total de Vendedores</h3>
-                  <p className="text-4xl font-bold text-purple-500">{vendedores.length}</p>
-                </div>
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
-                  <h3 className="text-lg text-gray-400">Total de Clientes</h3>
-                  <p className="text-4xl font-bold text-cyan-500">{clientes.length}</p>
-                </div>
-                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
-                  <h3 className="text-lg text-gray-400">Produtos Cadastrados</h3>
-                  <p className="text-4xl font-bold text-pink-500">{produtos.length}</p>
-                </div>
-              </div>
-
-              {/* Pedidos Pendentes (Ação Rápida) */}
-              <div className="mt-8">
-                <h3 className="text-xl font-bold mb-4">⚠️ Pedidos Aguardando Aprovação</h3>
-                <div className="bg-gray-800 rounded-xl overflow-hidden">
-                  {pedidos.filter(p => p.status === "Pendente").slice(0, 5).map((pedido) => (
-                    <div key={pedido._id} className="flex justify-between items-center p-4 border-b border-gray-700">
-                      <div className="flex items-start gap-4">
-                        {pedido.photo && (
-                          <a href={getImageUrl(pedido.photo) || "#"} target="_blank" rel="noopener noreferrer">
-                            <img 
-                              src={getImageUrl(pedido.photo) || ""} 
-                              alt="Referência" 
-                              className="w-16 h-16 object-cover rounded-lg hover:opacity-80 transition"
-                            />
-                          </a>
-                        )}
-                        <div>
-                          <p className="font-semibold">{pedido.nomeCliente}</p>
-                          <p className="text-sm text-gray-400">
-                            {pedido.produtoId?.name || "Produto"} - Vendedor: {pedido.vendedorId?.name || "N/A"}
-                          </p>
-                          <p className="text-sm text-orange-400">R$ {pedido.preco?.toFixed(2)}</p>
-                          {pedido.observacoes && (
-                            <p className="text-xs text-blue-400 mt-1">📝 {pedido.observacoes.substring(0, 50)}...</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleUpdatePedidoStatus(pedido._id, "Em Progresso")}
-                          className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm"
-                        >
-                          Aceitar
-                        </button>
-                        <button
-                          onClick={() => handleUpdatePedidoStatus(pedido._id, "Cancelado")}
-                          className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
-                        >
-                          Recusar
-                        </button>
+            <section>
+              {/* abas: mostrar apenas pedidos como antes */}
+              {activeTab === 'pedidos' && (
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold kv-accent mb-4">Todos os Pedidos</h3>
+                  {pedidosAtivos.length > 0 && (
+                    <div className="bg-card p-6 rounded mb-4">
+                      <h4 className="text-lg font-semibold kv-accent mb-2">Últimos Pedidos</h4>
+                      <div className="space-y-2">
+                        {pedidosAtivos.slice(0,5).map(p => (
+                          <div key={p._id} className="flex items-center justify-between border-b border-white/6 py-2">
+                            <div>
+                              <p className="font-medium text-app">{p.nomeCliente}</p>
+                              <p className="text-sm kv-muted">{p.produtoId?.name || 'Produto'} • R$ {p.preco?.toFixed(2)}</p>
+                            </div>
+                            <div className="text-sm badge-gold">{p.status}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                  {pedidosPendentes === 0 && (
-                    <p className="p-4 text-gray-400">✅ Nenhum pedido pendente!</p>
                   )}
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* Gerenciar Pedidos */}
-          {activeTab === "pedidos" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Gerenciar Pedidos</h2>
-              <div className="bg-gray-800 rounded-xl overflow-hidden overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Cliente</th>
-                      <th className="px-4 py-3 text-left">Vendedor</th>
-                      <th className="px-4 py-3 text-left">Produto</th>
-                      <th className="px-4 py-3 text-left">Qtd</th>
-                      <th className="px-4 py-3 text-left">Preço</th>
-                      <th className="px-4 py-3 text-left">Foto</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-left">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pedidosAtivos.map((pedido) => (
-                      <tr key={pedido._id} className="border-b border-gray-700 hover:bg-gray-750">
-                        <td className="px-4 py-3">
+                  {pedidosAtivos.length === 0 ? (
+                    <div className="bg-card p-6 rounded">Nenhum pedido encontrado.</div>
+                  ) : (
+                    <div className="bg-card p-4 rounded space-y-2">
+                      {pedidosAtivos.map(p => (
+                        <div key={p._id} className="flex items-center justify-between p-3 border-b border-white/6">
                           <div>
-                            <p>{pedido.nomeCliente}</p>
-                            {pedido.observacoes && (
-                              <p className="text-xs text-orange-400 mt-1" title={pedido.observacoes}>
-                                📝 {pedido.observacoes.substring(0, 25)}...
-                              </p>
+                            <div className="font-medium">{p.nomeCliente}</div>
+                            <div className="text-sm kv-muted">{p.produtoId?.name || 'Produto'}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm kv-muted">R$ {p.preco?.toFixed(2)}</div>
+                            {p.status === 'Pendente' ? (
+                              <div className="flex items-center gap-2">
+                                <Button variant="gold" onClick={() => { if (confirm('Deseja aceitar este pedido?')) handleUpdatePedidoStatus(p._id, 'Em Progresso'); }}>Aceitar</Button>
+                                <Button variant="ghost" onClick={() => { if (confirm('Deseja recusar e cancelar este pedido?')) handleUpdatePedidoStatus(p._id, 'Cancelado'); }}>Recusar</Button>
+                              </div>
+                            ) : (
+                              <select className="input-gold text-sm text-app bg-card appearance-none px-2 py-1 rounded" value={p.status} onChange={(e) => { const novo = e.target.value; if (novo === 'Cancelado' && !confirm('Confirma cancelar este pedido?')) return; handleUpdatePedidoStatus(p._id, novo); }}>
+                                <option value="Aguardando Pagamento">Aguardando Pagamento</option>
+                                <option value="Pendente">Pendente</option>
+                                <option value="Em Progresso">Em Progresso</option>
+                                <option value="Em Trânsito">Em Trânsito</option>
+                                <option value="Concluído">Concluído</option>
+                                <option value="Cancelado">Cancelado</option>
+                              </select>
                             )}
                           </div>
-                        </td>
-                        <td className="px-4 py-3">{pedido.vendedorId?.name || "N/A"}</td>
-                        <td className="px-4 py-3">{pedido.produtoId?.name || "N/A"}</td>
-                        <td className="px-4 py-3">{pedido.quantidade}</td>
-                        <td className="px-4 py-3">R$ {pedido.preco?.toFixed(2)}</td>
-                        <td className="px-4 py-3">
-                          {pedido.photo ? (
-                            <a 
-                              href={getImageUrl(pedido.photo) || "#"} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-orange-400 hover:text-orange-300"
-                            >
-                              📷 Ver
-                            </a>
-                          ) : (
-                            <span className="text-gray-500">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(pedido.status)}`}>
-                            {pedido.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={pedido.status}
-                            onChange={(e) => handleUpdatePedidoStatus(pedido._id, e.target.value)}
-                            className="bg-gray-700 rounded px-2 py-1 text-sm"
-                          >
-                            <option value="Pendente">Pendente</option>
-                            <option value="Aguardando Pagamento">Aguardando Pagamento</option>
-                            <option value="Em Progresso">Em Progresso</option>
-                            <option value="Em Trânsito">Em Trânsito</option>
-                            <option value="Concluído">Concluído</option>
-                            <option value="Cancelado">Cancelado</option>
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {pedidosAtivos.length === 0 && (
-                  <p className="p-4 text-gray-400 text-center">Nenhum pedido encontrado</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Lista de Vendedores */}
-          {activeTab === "vendedores" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Vendedores Cadastrados</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {vendedores.map((vendedor) => (
-                  <div key={vendedor._id} className="bg-gray-800 p-4 rounded-xl">
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-semibold text-lg">{vendedor.name}</h3>
-                      <button
-                        onClick={() => handleDeletarVendedor(vendedor._id)}
-                        className="text-red-500 hover:text-red-400 text-sm"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                    <p className="text-gray-400 text-sm">@{vendedor.login}</p>
-                    <p className="text-gray-400 text-sm mt-2">📧 {vendedor.email}</p>
-                    <p className="text-gray-400 text-sm">📞 {vendedor.telefone}</p>
-                    <p className="text-gray-400 text-sm">📍 {vendedor.endereco}</p>
-                    <p className="text-gray-500 text-xs mt-2">
-                      Cadastrado em: {new Date(vendedor.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-                {vendedores.length === 0 && (
-                  <p className="text-gray-400 col-span-3 text-center py-8">Nenhum vendedor cadastrado</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Novo Vendedor */}
-          {activeTab === "novoVendedor" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Cadastrar Novo Vendedor</h2>
-              <form onSubmit={handleCriarVendedor} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Nome Completo</label>
-                    <input
-                      type="text"
-                      value={novoVendedor.name}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, name: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Login (usuário)</label>
-                    <input
-                      type="text"
-                      value={novoVendedor.login}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, login: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={novoVendedor.email}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, email: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Telefone</label>
-                    <input
-                      type="tel"
-                      value={novoVendedor.telefone}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, telefone: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Data de Nascimento</label>
-                    <input
-                      type="date"
-                      value={novoVendedor.dataNascimento}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, dataNascimento: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Endereço</label>
-                    <input
-                      type="text"
-                      value={novoVendedor.endereco}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, endereco: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Senha</label>
-                    <input
-                      type="password"
-                      value={novoVendedor.password}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, password: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Confirmar Senha</label>
-                    <input
-                      type="password"
-                      value={novoVendedor.confirmPassword}
-                      onChange={(e) => setNovoVendedor({ ...novoVendedor, confirmPassword: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                >
-                  {loading ? "Cadastrando..." : "Cadastrar Vendedor"}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Lista de Produtos */}
-          {activeTab === "produtos" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Produtos Cadastrados</h2>
-              <div className="bg-gray-800 rounded-xl overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Nome</th>
-                      <th className="px-4 py-3 text-left">Categoria</th>
-                      <th className="px-4 py-3 text-left">Preço</th>
-                      <th className="px-4 py-3 text-left">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {produtos.map((produto) => (
-                      <tr key={produto._id} className="border-b border-gray-700 hover:bg-gray-750">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-semibold">{produto.name}</p>
-                            <p className="text-sm text-gray-400">{produto.descricao}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">{typeof produto.categoria === 'object' ? produto.categoria?.name : produto.categoria}</td>
-                        <td className="px-4 py-3">R$ {produto.preco?.toFixed(2)}</td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleAbrirEditarProduto(produto)}
-                            className="text-blue-500 hover:text-blue-400 mr-2"
-                          >
-                            ✏️ Editar
-                          </button>
-                          <button
-                            onClick={() => handleDeletarProduto(produto._id)}
-                            className="text-red-500 hover:text-red-400"
-                          >
-                            🗑️ Excluir
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {produtos.length === 0 && (
-                  <p className="p-4 text-gray-400 text-center">Nenhum produto cadastrado</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Novo Produto */}
-          {activeTab === "novoProduto" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Cadastrar Novo Produto</h2>
-              <form onSubmit={handleCriarProduto} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Nome do Produto</label>
-                    <input
-                      type="text"
-                      value={novoProduto.name}
-                      onChange={(e) => setNovoProduto({ ...novoProduto, name: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Descrição</label>
-                    <textarea
-                      value={novoProduto.descricao}
-                      onChange={(e) => setNovoProduto({ ...novoProduto, descricao: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      rows={3}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Categoria</label>
-                    <select
-                      value={novoProduto.categoria}
-                      onChange={(e) => setNovoProduto({ ...novoProduto, categoria: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    >
-                      <option value="">Selecione</option>
-                      {categorias.filter(c => c.ativo).map((cat) => (
-                        <option key={cat._id} value={cat._id}>{cat.name}</option>
+                        </div>
                       ))}
-                    </select>
-                    {categorias.filter(c => c.ativo).length === 0 && (
-                      <p className="text-xs text-yellow-500 mt-1">⚠️ Nenhuma categoria cadastrada. <button type="button" onClick={() => setActiveTab("novaCategoria")} className="underline">Criar uma</button></p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Preço (R$)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={novoProduto.preco}
-                      onChange={(e) => setNovoProduto({ ...novoProduto, preco: parseFloat(e.target.value) })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                >
-                  {loading ? "Cadastrando..." : "Cadastrar Produto"}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Lista de Todos os Clientes */}
-          {activeTab === "clientes" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Todos os Clientes</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {clientes.map((cliente) => (
-                  <div key={cliente._id} className="bg-gray-800 p-4 rounded-xl">
-                    <h3 className="font-semibold text-lg mb-2">{cliente.nome}</h3>
-                    <p className="text-gray-400 text-sm">📞 {cliente.telefone}</p>
-                    {cliente.email && <p className="text-gray-400 text-sm">✉️ {cliente.email}</p>}
-                    <p className="text-gray-400 text-sm mt-2">
-                      📍 {cliente.rua}, {cliente.numero} - {cliente.bairro}
-                    </p>
-                    <p className="text-gray-400 text-sm">{cliente.cidade} - {cliente.estado}</p>
-                    <p className="text-orange-400 text-xs mt-2">
-                      Vendedor: {cliente.vendedorId?.name || "N/A"}
-                    </p>
-                  </div>
-                ))}
-                {clientes.length === 0 && (
-                  <p className="text-gray-400 col-span-3 text-center py-8">Nenhum cliente cadastrado</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Lista de Todas as Rotas */}
-          {activeTab === "trajetos" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Todas as Rotas</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {trajetos.map((trajeto) => (
-                  <div key={trajeto._id} className="bg-gray-800 p-4 rounded-xl">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-lg">{trajeto.nomeCliente}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(trajeto.status)}`}>
-                        {trajeto.status}
-                      </span>
                     </div>
-                    <p className="text-gray-400 text-sm">{trajeto.rua}, {trajeto.bairro}</p>
-                    <p className="text-gray-400 text-sm">{trajeto.cidade} - {trajeto.estado}</p>
-                    <p className="text-gray-400 text-sm">CEP: {trajeto.cep}</p>
-                    {trajeto.dataVisita && (
-                      <p className="text-blue-400 text-sm mt-2">
-                        Visita: {new Date(trajeto.dataVisita).toLocaleDateString()}
-                      </p>
-                    )}
-                    <p className="text-orange-400 text-xs mt-2">
-                      Vendedor: {trajeto.vendedorId?.name || "N/A"}
-                    </p>
-                  </div>
-                ))}
-                {trajetos.length === 0 && (
-                  <p className="text-gray-400 col-span-3 text-center py-8">Nenhuma rota cadastrada</p>
-                )}
-              </div>
-            </div>
-          )}
+                  )}
+                </div>
+              )}
 
-          {/* Lista de Cupons */}
-          {activeTab === "cupons" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Cupons de Desconto</h2>
-              <div className="bg-gray-800 rounded-xl overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Código</th>
-                      <th className="px-4 py-3 text-left">Desconto</th>
-                      <th className="px-4 py-3 text-left">Valor Mínimo</th>
-                      <th className="px-4 py-3 text-left">Validade</th>
-                      <th className="px-4 py-3 text-left">Usos</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-left">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cupons.map((cupom) => (
-                      <tr key={cupom._id} className="border-b border-gray-700 hover:bg-gray-750">
-                        <td className="px-4 py-3">
-                          <span className="font-mono font-bold text-orange-400">{cupom.codigo}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="bg-green-600 px-2 py-1 rounded text-sm font-bold">{cupom.desconto}%</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {cupom.valorMinimo > 0 ? `R$ ${cupom.valorMinimo.toFixed(2)}` : "Sem mínimo"}
-                        </td>
-                        <td className="px-4 py-3">
-                          {cupom.dataValidade 
-                            ? new Date(cupom.dataValidade).toLocaleDateString() 
-                            : "Sem validade"}
-                        </td>
-                        <td className="px-4 py-3">
-                          {cupom.vezesUsado}{cupom.usoMaximo ? `/${cupom.usoMaximo}` : ""}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-full text-xs ${cupom.ativo ? "bg-green-600" : "bg-red-600"}`}>
-                            {cupom.ativo ? "Ativo" : "Inativo"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleToggleCupom(cupom._id, cupom.ativo)}
-                              className={`px-3 py-1 rounded text-xs ${cupom.ativo ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"}`}
-                            >
-                              {cupom.ativo ? "Desativar" : "Ativar"}
-                            </button>
-                            <button
-                              onClick={() => handleReenviarNotificacao(cupom._id)}
-                              className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs"
-                              title="Reenviar notificação"
-                            >
-                              📱
-                            </button>
-                            <button
-                              onClick={() => handleDeletarCupom(cupom._id)}
-                              className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+              {activeTab === 'vendedores' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Vendedores</h3>
+                    <Button variant="gold" onClick={() => setActiveTab('novoVendedor')}>+ Novo Vendedor</Button>
+                  </div>
+                  <div className="bg-card p-4 rounded space-y-2">
+                    {vendedores.map(v => (
+                      <div key={v._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                        <div>
+                          <div className="font-medium">{v.name}</div>
+                          <div className="text-sm kv-muted">{v.login} • {v.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" onClick={() => handleEditarVendedor(v)}>Editar</Button>
+                          <Button variant="primary" onClick={() => handleDeletarVendedor(v._id)}>Excluir</Button>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-                {cupons.length === 0 && (
-                  <p className="p-4 text-gray-400 text-center">Nenhum cupom cadastrado</p>
-                )}
-              </div>
-            </div>
-          )}
+                  </div>
+                </div>
+              )}
 
-          {/* Criar Novo Cupom */}
-          {activeTab === "novoCupom" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Criar Novo Cupom</h2>
-              <form onSubmit={handleCriarCupom} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Código do Cupom</label>
-                    <input
-                      type="text"
-                      value={novoCupom.codigo}
-                      onChange={(e) => setNovoCupom({ ...novoCupom, codigo: e.target.value.toUpperCase() })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono uppercase"
-                      placeholder="Ex: DESCONTO20, PRIMEIRACOMPRA"
-                      required
-                    />
+              {activeTab === 'produtos' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Produtos</h3>
+                    <Button variant="gold" onClick={() => setActiveTab('novoProduto')}>+ Novo Produto</Button>
                   </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Desconto (%)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={novoCupom.desconto}
-                      onChange={(e) => setNovoCupom({ ...novoCupom, desconto: parseInt(e.target.value) })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
+                  <div className="bg-card p-4 rounded space-y-2">
+                    {produtos.map(prod => (
+                      <div key={prod._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                        <div className="flex items-center gap-4">
+                          {prod.imagem && <img src={getImageUrl(prod.imagem) || ''} alt="" className="w-12 h-12 object-cover rounded" />}
+                          <div>
+                            <div className="font-medium">{prod.name}</div>
+                            <div className="text-sm kv-muted">R$ {prod.preco?.toFixed(2)}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" onClick={() => handleAbrirEditarProduto(prod)}>Editar</Button>
+                          <Button variant="primary" onClick={() => handleDeletarProduto(prod._id)}>Excluir</Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Valor Mínimo do Pedido (R$)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={novoCupom.valorMinimo}
-                      onChange={(e) => setNovoCupom({ ...novoCupom, valorMinimo: parseFloat(e.target.value) })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="0 = sem mínimo"
-                    />
+                </div>
+              )}
+
+              {activeTab === 'clientes' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Clientes</h3>
+                    <Button variant="gold" onClick={() => setActiveTab('novoCliente')}>+ Novo Cliente</Button>
                   </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Data de Validade (opcional)</label>
-                    <input
-                      type="date"
-                      value={novoCupom.dataValidade}
-                      onChange={(e) => setNovoCupom({ ...novoCupom, dataValidade: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
+                  <div className="bg-card p-4 rounded space-y-2">
+                    {clientes.map(c => (
+                      <div key={c._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                        <div>
+                          <div className="font-medium">{c.nome}</div>
+                          <div className="text-sm kv-muted">{c.email} • {c.telefone}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" onClick={() => handleEditarCliente(c)}>Editar</Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Limite de Uso (opcional)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={novoCupom.usoMaximo}
-                      onChange={(e) => setNovoCupom({ ...novoCupom, usoMaximo: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Vazio = uso ilimitado"
-                    />
+                </div>
+              )}
+
+              {activeTab === 'trajetos' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Trajetos</h3>
+                    <div className="flex gap-2">
+                      <Button variant="gold" onClick={() => setShowNovoTrajeto(s => !s)}>{showNovoTrajeto ? 'Fechar' : '+ Novo Trajeto'}</Button>
+                    </div>
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={novoCupom.notificarClientes}
-                        onChange={(e) => setNovoCupom({ ...novoCupom, notificarClientes: e.target.checked })}
-                        className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-orange-500 focus:ring-orange-500"
-                      />
-                      <span className="text-gray-300">📱 Notificar todos os clientes através do Email</span>
+
+                  {showNovoTrajeto && (
+                    <div className="bg-card p-4 rounded">
+                      {/* Formulário com md:grid-cols-3 para permitir campos largos */}
+                      <form onSubmit={handleCriarTrajeto} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input className="input-gold md:col-span-2" placeholder="Nome do Cliente" value={novoTrajeto.nomeCliente} onChange={e => setNovoTrajeto(s => ({ ...s, nomeCliente: e.target.value }))} />
+                        <input className="input-gold" placeholder="Cidade" value={novoTrajeto.cidade} onChange={e => setNovoTrajeto(s => ({ ...s, cidade: e.target.value }))} />
+                        <input className="input-gold" placeholder="Estado" value={novoTrajeto.estado} onChange={e => setNovoTrajeto(s => ({ ...s, estado: e.target.value }))} />
+                        <input className="input-gold md:col-span-2" placeholder="Rua" value={novoTrajeto.rua} onChange={e => setNovoTrajeto(s => ({ ...s, rua: e.target.value }))} />
+                        <input className="input-gold" placeholder="Bairro" value={novoTrajeto.bairro} onChange={e => setNovoTrajeto(s => ({ ...s, bairro: e.target.value }))} />
+                        <input className="input-gold" placeholder="CEP" value={novoTrajeto.cep} onChange={e => setNovoTrajeto(s => ({ ...s, cep: e.target.value }))} />
+                        <input className="input-gold" placeholder="Data Visita (DD/MM/AAAA)" value={novoTrajeto.dataVisita} onChange={e => setNovoTrajeto(s => ({ ...s, dataVisita: e.target.value }))} />
+                        <div className="col-span-full md:col-span-3 flex gap-2"><Button variant="gold" type="submit">Criar Trajeto</Button><Button variant="ghost" onClick={() => setShowNovoTrajeto(false)}>Cancelar</Button></div>
+                      </form>
+                    </div>
+                  )}
+
+                  <div className="bg-card p-4 rounded space-y-2">
+                    {trajetos.map(t => (
+                      <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                        <div>
+                          <div className="font-medium">{t.nomeCliente}</div>
+                          <div className="text-sm kv-muted">{t.cidade} - {t.estado}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm kv-muted">{new Date(t.createdAt).toLocaleDateString()}</div>
+                          <Button variant="primary" onClick={() => handleDeletarTrajeto(t._id)}>Excluir</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'cupons' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Cupons</h3>
+                    <Button variant="gold" onClick={() => setActiveTab('novoCupom')}>+ Novo Cupom</Button>
+                  </div>
+                  <div className="bg-card p-4 rounded space-y-2">{cupons.map(cp => (
+                    <div key={cp._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                      <div>
+                        <div className="font-medium">{cp.codigo} — {cp.desconto}%</div>
+                        <div className="text-sm kv-muted">Mínimo R$ {cp.valorMinimo.toFixed(2)}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" onClick={() => handleToggleCupom(cp._id, cp.ativo)}>{cp.ativo ? 'Desativar' : 'Ativar'}</Button>
+                        <Button variant="primary" onClick={() => handleDeletarCupom(cp._id)}>Excluir</Button>
+                      </div>
+                    </div>
+                  ))}</div>
+                </div>
+              )}
+
+              {activeTab === 'categorias' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Categorias</h3>
+                    <Button variant="gold" onClick={() => setActiveTab('novaCategoria')}>+ Nova Categoria</Button>
+                  </div>
+                  <div className="bg-card p-4 rounded space-y-2">{categorias.map(cat => (
+                    <div key={cat._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                      <div>
+                        <div className="font-medium">{cat.name}</div>
+                        <div className="text-sm kv-muted">{cat.descricao}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" onClick={() => handleToggleCategoria(cat._id, cat.ativo)}>{cat.ativo ? 'Desativar' : 'Ativar'}</Button>
+                        <Button variant="primary" onClick={() => handleDeletarCategoria(cat._id)}>Excluir</Button>
+                      </div>
+                    </div>
+                  ))}</div>
+                </div>
+              )}
+
+              {/* Formulários de criação rápida (novoVendedor, novoProduto, novoCliente, novoCupom, novaCategoria) */}
+
+              {activeTab === 'novoVendedor' && (
+                <div className="bg-card p-6 rounded">
+                  <h3 className="text-xl font-semibold kv-accent mb-4">{editVendedorId ? 'Editar Vendedor' : 'Criar Vendedor'}</h3>
+                  <form onSubmit={handleCriarVendedor} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input className="input-gold" placeholder="Nome" value={novoVendedor.name} onChange={e => setNovoVendedor(s => ({ ...s, name: e.target.value }))} />
+                    <input className="input-gold" placeholder="Login" value={novoVendedor.login} onChange={e => setNovoVendedor(s => ({ ...s, login: e.target.value }))} />
+                    <input className="input-gold" placeholder="Email" value={novoVendedor.email} onChange={e => setNovoVendedor(s => ({ ...s, email: e.target.value }))} />
+                    <input className="input-gold" placeholder="Telefone" value={novoVendedor.telefone} onChange={e => setNovoVendedor(s => ({ ...s, telefone: e.target.value }))} />
+                    <input className="input-gold" placeholder="Senha (deixe em branco para manter)" type="password" value={novoVendedor.password} onChange={e => setNovoVendedor(s => ({ ...s, password: e.target.value }))} />
+                    <input className="input-gold" placeholder="Confirmar Senha" type="password" value={novoVendedor.confirmPassword} onChange={e => setNovoVendedor(s => ({ ...s, confirmPassword: e.target.value }))} />
+                    <div className="col-span-full flex gap-2"><Button variant="gold" type="submit">{editVendedorId ? 'Salvar' : 'Criar'}</Button><Button variant="ghost" onClick={() => { setActiveTab('vendedores'); setEditVendedorId(null); setNovoVendedor({ name: '', login: '', email: '', telefone: '', endereco: '', dataNascimento: '', password: '', confirmPassword: '' }); }}>Cancelar</Button></div>
+                  </form>
+                </div>
+              )}
+
+              {activeTab === 'novoProduto' && (
+                <div className="bg-card p-6 rounded">
+                  <h3 className="text-xl font-semibold kv-accent mb-4">{editProdutoId ? 'Editar Produto' : 'Criar Produto'}</h3>
+                  <form onSubmit={handleCriarProduto} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Nome do produto</div>
+                      <input className="input-gold" placeholder="Ex: Camisa Polo - Tamanho M" value={novoProduto.name} onChange={e => setNovoProduto(s => ({ ...s, name: e.target.value }))} />
                     </label>
-                    <p className="text-xs text-gray-500 mt-1 ml-7">
-                      Uma mensagem será enviada automaticamente para todos os clientes cadastrados
-                    </p>
-                  </div>
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Preço (R$)</div>
+                      <input className="input-gold" placeholder="Ex: 79.90" type="number" step="0.01" value={novoProduto.preco} onChange={e => { let v = e.target.value; if (v.length > 1 && v.startsWith('0') && !v.startsWith('0.')) { v = v.replace(/^0+/, ''); if (v === '') v = '0'; } setNovoProduto(s => ({ ...s, preco: v })); }} />
+                    </label>
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Categoria</div>
+                      <select className="input-gold text-sm text-app bg-card appearance-none px-2 py-1 rounded" value={novoProduto.categoria} onChange={e => setNovoProduto(s => ({ ...s, categoria: e.target.value }))}>
+                        <option value="">Selecione categoria</option>
+                        {categorias.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      </select>
+                    </label>
+
+                    {/* Descrição posicionada à direita da categoria em telas md+ */}
+                    <label className="block md:col-span-1 md:col-start-2">
+                      <div className="text-sm kv-muted mb-1">Descrição</div>
+                      <textarea rows={4} className="input-gold w-full min-h-[5.5rem] resize-y" placeholder="Breve descrição do produto, materiais, observações de tamanho, etc." value={novoProduto.descricao} onChange={e => setNovoProduto(s => ({ ...s, descricao: e.target.value }))} />
+                    </label>
+
+                    <div className="col-span-full flex gap-2"><Button variant="gold" type="submit">{editProdutoId ? 'Salvar' : 'Criar'}</Button><Button variant="ghost" onClick={() => { setActiveTab('produtos'); setEditProdutoId(null); setNovoProduto({ name: '', descricao: '', preco: '', categoria: '' }); }}>Cancelar</Button></div>
+                  </form>
                 </div>
+              )}
 
-                {/* Preview do Cupom */}
-                <div className="mt-6 p-4 bg-gray-700 rounded-lg">
-                  <p className="text-sm text-gray-400 mb-2">Preview:</p>
-                  <div className="flex items-center gap-4">
-                    <span className="font-mono text-xl font-bold text-orange-400">{novoCupom.codigo || "CODIGO"}</span>
-                    <span className="bg-green-600 px-3 py-1 rounded-lg font-bold">{novoCupom.desconto}% OFF</span>
-                    {novoCupom.valorMinimo > 0 && (
-                      <span className="text-sm text-gray-400">Pedido mínimo: R$ {novoCupom.valorMinimo.toFixed(2)}</span>
-                    )}
-                  </div>
+              {activeTab === 'novoCliente' && (
+                <div className="bg-card p-6 rounded">
+                  <h3 className="text-xl font-semibold kv-accent mb-4">{editClienteId ? 'Editar Cliente' : 'Criar Cliente'}</h3>
+                  <form onSubmit={handleCriarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input className="input-gold" placeholder="Nome" value={novoCliente.nome} onChange={e => setNovoCliente(s => ({ ...s, nome: e.target.value }))} />
+                    <input className="input-gold" placeholder="CPF" value={novoCliente.cpf} onChange={e => setNovoCliente(s => ({ ...s, cpf: e.target.value }))} />
+                    <input className="input-gold" placeholder="Email" value={novoCliente.email} onChange={e => setNovoCliente(s => ({ ...s, email: e.target.value }))} />
+                    <input className="input-gold" placeholder="Telefone" value={novoCliente.telefone} onChange={e => setNovoCliente(s => ({ ...s, telefone: e.target.value }))} />
+                    <div className="col-span-full flex gap-2"><Button variant="gold" type="submit">{editClienteId ? 'Salvar' : 'Criar'}</Button><Button variant="ghost" onClick={() => { setActiveTab('clientes'); setEditClienteId(null); setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' }); }}>Cancelar</Button></div>
+                  </form>
                 </div>
+              )}
 
-                <div className="mt-6">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                  >
-                    {loading ? "Criando..." : "🎉 Criar Cupom"}
-                  </button>
+              {activeTab === 'novoCupom' && (
+                <div className="bg-card p-6 rounded">
+                  <h3 className="text-xl font-semibold kv-accent mb-4">Criar Cupom</h3>
+                  <form onSubmit={handleCriarCupom} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Código do cupom</div>
+                      <input className="input-gold" placeholder="Ex: BOASVINDAS10" value={novoCupom.codigo} onChange={e => setNovoCupom(s => ({ ...s, codigo: e.target.value }))} />
+                    </label>
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Desconto (%)</div>
+                      <input className="input-gold" placeholder="Ex: 10" type="number" value={novoCupom.desconto} onChange={e => setNovoCupom(s => ({ ...s, desconto: Number(e.target.value) }))} />
+                    </label>
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Valor mínimo (R$)</div>
+                      <input className="input-gold" placeholder="Ex: 100" type="number" value={novoCupom.valorMinimo} onChange={e => setNovoCupom(s => ({ ...s, valorMinimo: Number(e.target.value) }))} />
+                    </label>
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Validade (opcional)</div>
+                      <input className="input-gold" placeholder="AAAA-MM-DD (opcional)" type="date" value={novoCupom.dataValidade} onChange={e => setNovoCupom(s => ({ ...s, dataValidade: e.target.value }))} />
+                    </label>
+                    <label className="block">
+                      <div className="text-sm kv-muted mb-1">Uso máximo por cupom (opcional)</div>
+                      <input className="input-gold" placeholder="Quantidade máxima de usos (deixe em branco para ilimitado)" type="number" value={novoCupom.usoMaximo as any} onChange={e => setNovoCupom(s => ({ ...s, usoMaximo: e.target.value }))} />
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={novoCupom.notificarClientes} onChange={e => setNovoCupom(s => ({ ...s, notificarClientes: e.target.checked }))} />
+                      <div className="text-sm kv-muted">Notificar clientes por e-mail quando criado</div>
+                    </label>
+                    <div className="col-span-full flex gap-2"><Button variant="gold" type="submit">Criar</Button><Button variant="ghost" onClick={() => setActiveTab('cupons')}>Cancelar</Button></div>
+                  </form>
                 </div>
-              </form>
-            </div>
-          )}
+              )}
 
-          {/* Cadastrar Novo Cliente */}
-          {activeTab === "novoCliente" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Cadastrar Novo Cliente</h2>
-              <form onSubmit={handleCriarCliente} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-400 mb-1">Nome Completo *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.nome}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, nome: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">CPF *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.cpf}
-                      onChange={(e) => {
-                        const cpfFormatado = formatarCPF(e.target.value);
-                        setNovoCliente({ ...novoCliente, cpf: cpfFormatado });
-                        if (cpfFormatado.length === 14) {
-                          if (!validarCPF(cpfFormatado)) {
-                            setErroValidacaoCPF("CPF inválido!");
-                          } else {
-                            setErroValidacaoCPF(null);
-                          }
-                        } else {
-                          setErroValidacaoCPF(null);
-                        }
-                      }}
-                      className={`w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 ${
-                        erroValidacaoCPF ? "ring-2 ring-red-500 focus:ring-red-500" : "focus:ring-orange-500"
-                      }`}
-                      placeholder="000.000.000-00"
-                      maxLength={14}
-                      required
-                    />
-                    {erroValidacaoCPF && (
-                      <p className="text-xs text-red-500 mt-1">❌ {erroValidacaoCPF}</p>
-                    )}
-                    {novoCliente.cpf.length === 14 && !erroValidacaoCPF && (
-                      <p className="text-xs text-green-500 mt-1">✅ CPF válido</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Telefone (WhatsApp) *</label>
-                    <input
-                      type="tel"
-                      value={novoCliente.telefone}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, telefone: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="(00) 00000-0000"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Links de pagamento serão enviados para este número</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={novoCliente.email}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, email: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Cidade *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.cidade}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, cidade: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Estado *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.estado}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, estado: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Rua *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.rua}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, rua: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Número *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.numero}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, numero: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Bairro *</label>
-                    <input
-                      type="text"
-                      value={novoCliente.bairro}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, bairro: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">CEP</label>
-                    <input
-                      type="text"
-                      value={novoCliente.cep}
-                      onChange={(e) => setNovoCliente({ ...novoCliente, cep: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Complemento</label>
-                    <input
-                      type="text"
-                      value={novoCliente.complemento}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNovoCliente({ ...novoCliente, complemento: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
+              {activeTab === 'novaCategoria' && (
+                <div className="bg-card p-6 rounded">
+                  <h3 className="text-xl font-semibold kv-accent mb-4">Criar Categoria</h3>
+                  <form onSubmit={async (e) => { e.preventDefault(); setLoading(true); setMessage(null); try { const response = await fetch(`${API_URL}/categorias`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(novaCategoria) }); if (response.ok) { setMessage({ type: 'success', text: 'Categoria criada com sucesso!' }); setNovaCategoria({ name: '', descricao: '' }); fetchCategorias(); setActiveTab('categorias'); } else { const err = await response.json(); setMessage({ type: 'error', text: err.error || 'Erro ao criar categoria' }); } } catch (err) { setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' }); } finally { setLoading(false); } }} className="grid grid-cols-1 gap-4">
+                    <input className="input-gold" placeholder="Nome" value={novaCategoria.name} onChange={e => setNovaCategoria(s => ({ ...s, name: e.target.value }))} />
+                    <textarea className="input-gold" placeholder="Descrição" value={novaCategoria.descricao} onChange={e => setNovaCategoria(s => ({ ...s, descricao: e.target.value }))} />
+                    <div className="flex gap-2"><Button variant="gold" type="submit">Criar</Button><Button variant="ghost" onClick={() => setActiveTab('categorias')}>Cancelar</Button></div>
+                  </form>
                 </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                >
-                  {loading ? "Cadastrando..." : "👤 Cadastrar Cliente"}
-                </button>
-              </form>
-            </div>
-          )}
+              )}
 
-          {/* Lista de Categorias */}
-          {activeTab === "categorias" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Categorias de Produtos</h2>
-              <div className="bg-gray-800 rounded-xl overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-700">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Nome</th>
-                      <th className="px-4 py-3 text-left">Descrição</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-left">Criada em</th>
-                      <th className="px-4 py-3 text-left">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {categorias.map((categoria) => (
-                      <tr key={categoria._id} className="border-b border-gray-700 hover:bg-gray-750">
-                        <td className="px-4 py-3">
-                          <span className="font-semibold text-orange-400">{categoria.name}</span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-400">
-                          {categoria.descricao || "-"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-3 py-1 rounded-full text-xs ${categoria.ativo ? "bg-green-600" : "bg-red-600"}`}>
-                            {categoria.ativo ? "Ativa" : "Inativa"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 text-sm">
-                          {new Date(categoria.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleToggleCategoria(categoria._id, categoria.ativo)}
-                              className={`px-3 py-1 rounded text-xs ${categoria.ativo ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"}`}
-                            >
-                              {categoria.ativo ? "Desativar" : "Ativar"}
-                            </button>
-                            <button
-                              onClick={() => handleDeletarCategoria(categoria._id)}
-                              className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-xs"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {categorias.length === 0 && (
-                  <p className="p-4 text-gray-400 text-center">Nenhuma categoria cadastrada. <button onClick={() => setActiveTab("novaCategoria")} className="text-orange-400 underline">Criar primeira categoria</button></p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Criar Nova Categoria */}
-          {activeTab === "novaCategoria" && (
-            <div>
-              <h2 className="text-3xl font-bold mb-6">Criar Nova Categoria</h2>
-              <form onSubmit={handleCriarCategoria} className="bg-gray-800 p-6 rounded-xl max-w-2xl">
-                <div className="grid grid-cols-1 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Nome da Categoria *</label>
-                    <input
-                      type="text"
-                      value={novaCategoria.name}
-                      onChange={(e) => setNovaCategoria({ ...novaCategoria, name: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="Ex: Polo, Camiseta, Calça..."
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Descrição (opcional)</label>
-                    <textarea
-                      value={novaCategoria.descricao}
-                      onChange={(e) => setNovaCategoria({ ...novaCategoria, descricao: e.target.value })}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      rows={3}
-                      placeholder="Uma breve descrição desta categoria..."
-                    />
-                  </div>
-                </div>
-
-                {/* Preview */}
-                <div className="mt-6 p-4 bg-gray-700 rounded-lg">
-                  <p className="text-sm text-gray-400 mb-2">Preview:</p>
-                  <div className="flex items-center gap-4">
-                    <span className="bg-purple-600 px-4 py-2 rounded-lg font-bold">{novaCategoria.name || "Nome da Categoria"}</span>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-6 w-full bg-orange-600 hover:bg-orange-700 py-3 rounded-lg font-semibold transition disabled:opacity-50"
-                >
-                  {loading ? "Criando..." : "📂 Criar Categoria"}
-                </button>
-              </form>
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* Modal de edição de produto */}
-      {editModalOpen && editProdutoData && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-8 rounded-xl w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Editar Produto</h2>
-            <label className="block text-sm text-gray-400 mb-1">Nome</label>
-            <input
-              type="text"
-              value={editProdutoData.name}
-              onChange={e => setEditProdutoData({ ...editProdutoData, name: e.target.value })}
-              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-2"
-            />
-            <label className="block text-sm text-gray-400 mb-1">Descrição</label>
-            <textarea
-              value={editProdutoData.descricao}
-              onChange={e => setEditProdutoData({ ...editProdutoData, descricao: e.target.value })}
-              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-2"
-              rows={2}
-            />
-            <label className="block text-sm text-gray-400 mb-1">Preço</label>
-            <input
-              type="number"
-              value={editProdutoData.preco}
-              onChange={e => setEditProdutoData({ ...editProdutoData, preco: Number(e.target.value) })}
-              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-2"
-              min={0}
-              step={0.01}
-            />
-            <label className="block text-sm text-gray-400 mb-1">Categoria</label>
-            <select
-              value={typeof editProdutoData.categoria === 'object' ? editProdutoData.categoria._id : editProdutoData.categoria}
-              onChange={e => {
-                const catObj = categorias.find(cat => cat._id === e.target.value);
-                setEditProdutoData({ ...editProdutoData, categoria: catObj ? catObj : e.target.value });
-              }}
-              className="w-full bg-gray-700 rounded-lg px-4 py-2 mb-4"
-            >
-              <option value="">Selecione...</option>
-              {categorias.map(cat => (
-                <option key={cat._id} value={cat._id}>{cat.name}</option>
-              ))}
-            </select>
-            <div className="flex gap-4 justify-end">
-              <button
-                onClick={() => setEditModalOpen(false)}
-                className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-500"
-              >Cancelar</button>
-              <button
-                onClick={handleSalvarEdicaoProduto}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500"
-              >Salvar</button>
-            </div>
-          </div>
+            </section>
+          </main>
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -8,8 +8,8 @@ const getAllProdutos = async () => {
     return await produtoRepository.getAllProdutos();
 };
 
-const saveProduto = async ({name, descricao, preco, categoria, imagem}) => {
-    return await produtoRepository.saveProduto({name, descricao, preco, categoria, imagem});
+const saveProduto = async ({name, preco, categoria, imagem}) => {
+    return await produtoRepository.saveProduto({name, preco, categoria, imagem});
 };
 
 const updateProduto = async (id, {name, descricao, preco, categoria, imagem}) => {
