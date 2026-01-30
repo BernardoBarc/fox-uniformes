@@ -75,11 +75,11 @@ export default function PagamentoPage() {
 
   // Overlay de loading global para indicar processamento de pagamento
   // Mantém o overlay enquanto processando ou aguardando confirmação via webhook
-  const loadingMessage = (processando || aguardandoConfirmacao)
+  const loadingMessage = (processando)
     ? (metodoPagamento === 'CREDIT_CARD' ? 'Processando pagamento com cartão...' : 'Processando pagamento...')
     : null;
 
-  const LoadingOverlay = (processando || aguardandoConfirmacao) ? (
+  const LoadingOverlay = (processando) ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-gray-800 p-6 rounded-lg flex flex-col items-center gap-4">
         <div className="animate-spin h-8 w-8 border-4 border-white rounded-full border-t-transparent"></div>
@@ -143,17 +143,33 @@ export default function PagamentoPage() {
     try {
       /* ---------- PIX ---------- */
       if (metodoPagamento === "PIX") {
-        const res = await fetch(
-          `${API_URL}/pagamento/${pagamento._id}/pix`
-        );
-        if (!res.ok) throw new Error();
+        let data;
+        try {
+          const res = await fetch(
+            `${API_URL}/pagamento/${pagamento._id}/pix`
+          );
+          if (!res.ok) {
+            const txt = await res.text().catch(() => null);
+            console.error('[DEBUG] /pix response not ok', res.status, txt);
+            throw new Error('Falha ao obter dados PIX');
+          }
 
-        const data = await res.json();
-        setPixData({
-          qrCodeBase64: data.qrCodeBase64,
-          copiaECola: data.copiaECola,
-        });
-        setAguardandoConfirmacao(true);
+          data = await res.json();
+          console.log('[DEBUG] /pix response json:', data);
+
+          setPixData({
+            qrCodeBase64: data.qrCodeBase64,
+            copiaECola: data.copiaECola,
+          });
+          // encerra o estado de processamento imediato para mostrar o QR
+          setProcessando(false);
+          setAguardandoConfirmacao(true);
+        } catch (pixErr) {
+          console.error('Erro ao obter PIX:', pixErr);
+          setCardError('Erro ao gerar PIX. Tente novamente.');
+          setProcessando(false);
+          return;
+        }
       }
 
       /* ---------- CARTÃO ---------- */
@@ -300,21 +316,29 @@ export default function PagamentoPage() {
     if (!aguardandoConfirmacao || !pagamento?._id) return;
 
     const interval = setInterval(async () => {
-      const res = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
-      if (!res.ok) return;
+      try {
+        const res = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
+        if (!res.ok) {
+          console.warn('[DEBUG] poll /pagamentos not ok', res.status);
+          return;
+        }
 
-      const data = await res.json();
-      setPagamento(data);
+        const data = await res.json();
+        console.log('[DEBUG] poll pagamento:', data?.status);
+        setPagamento(data);
 
-      if (data.status === "Aprovado") {
-        setPixData(null);
-        setAguardandoConfirmacao(false);
-        setProcessando(false);
-      } else if (data.status && data.status !== 'Pendente') {
-        // pagamento finalizado com outro status (rejeitado/cancelado)
-        setAguardandoConfirmacao(false);
-        setProcessando(false);
-        setCardError(`Pagamento finalizado com status: ${data.status}`);
+        if (data.status === "Aprovado") {
+          setPixData(null);
+          setAguardandoConfirmacao(false);
+          setProcessando(false);
+        } else if (data.status && data.status !== 'Pendente') {
+          // pagamento finalizado com outro status (rejeitado/cancelado)
+          setAguardandoConfirmacao(false);
+          setProcessando(false);
+          setCardError(`Pagamento finalizado com status: ${data.status}`);
+        }
+      } catch (pollErr) {
+        console.error('[DEBUG] erro no poll pagamento:', pollErr);
       }
     }, 4000);
 

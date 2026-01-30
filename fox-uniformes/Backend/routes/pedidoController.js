@@ -54,8 +54,19 @@ router.post("/pedidos", upload.single("photo"), async (req, res) => {
             imagemUrl = `/uploads/${req.file.filename}`;
         }
 
+        // Se items vier via form-data como string JSON, tentar parsear
+        let items = undefined;
+        if (req.body.items) {
+            try {
+                items = typeof req.body.items === 'string' ? JSON.parse(req.body.items) : req.body.items;
+            } catch (err) {
+                console.warn('Não foi possível parsear items:', err);
+            }
+        }
+
         const dadosPedido = {
             ...req.body,
+            items,
             photo: imagemUrl
         }
 

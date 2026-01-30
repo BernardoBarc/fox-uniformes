@@ -92,17 +92,34 @@ const criarPagamento = async ({
     });
     console.log('[DEBUG] pagamento salvo', { pagamentoId: pagamento._id });
 
+    // Carrega os pedidos populando produto dentro de items (novo schema)
     const pedidosDb = await Pedido.find({
       _id: { $in: pedidos }
-    }).populate('produtoId');
+    }).populate('items.produtoId');
     console.log('[DEBUG] pedidos carregados para preference', { count: pedidosDb.length });
 
-    const items = pedidosDb.map(p => ({
-      title: p.produtoId?.name || 'Produto',
-      quantity: p.quantidade,
-      unit_price: Number(p.preco),
-      currency_id: 'BRL'
-    }));
+    // Monta os items para a preference do MercadoPago a partir de pedido.items
+    const items = [];
+    for (const p of pedidosDb) {
+      if (p.items && p.items.length) {
+        for (const it of p.items) {
+          items.push({
+            title: it.produtoId?.name || 'Produto',
+            quantity: Number(it.quantidade || 1),
+            unit_price: Number(it.precoUnitario ?? (it.precoTotal && it.quantidade ? it.precoTotal / it.quantidade : 0)),
+            currency_id: 'BRL'
+          });
+        }
+      } else {
+        // Fallback para pedidos no formato antigo
+        items.push({
+          title: p.produtoId?.name || 'Produto',
+          quantity: Number(p.quantidade || 1),
+          unit_price: Number(p.preco || 0),
+          currency_id: 'BRL'
+        });
+      }
+    }
 
     const preference = await preferenceApi.create({
       body: {
@@ -474,16 +491,34 @@ const gerarNotaFiscalPagamento = async (
   cliente,
   metodoPagamento
 ) => {
+  // Busca pedidos populando produto dentro de items (novo schema)
   const pedidos = await Pedido.find({
     _id: { $in: pagamento.pedidos }
-  }).populate('produtoId');
+  }).populate('items.produtoId');
 
-  const itens = pedidos.map(p => ({
-    produtoNome: p.produtoId?.name || 'Produto',
-    quantidade: p.quantidade,
-    precoUnitario: p.preco / p.quantidade,
-    precoTotal: p.preco
-  }));
+  // Converte cada item de cada pedido para o formato esperado pela geração de nota
+  const itens = [];
+
+  for (const p of pedidos) {
+    if (p.items && p.items.length) {
+      for (const it of p.items) {
+        itens.push({
+          produtoNome: it.produtoId?.name || 'Produto',
+          quantidade: it.quantidade || 1,
+          precoUnitario: it.precoUnitario ?? (it.precoTotal && it.quantidade ? it.precoTotal / it.quantidade : 0),
+          precoTotal: it.precoTotal ?? (it.precoUnitario && it.quantidade ? it.precoUnitario * it.quantidade : 0)
+        });
+      }
+    } else {
+      // Fallback para pedidos no formato antigo (top-level produtoId / quantidade / preco)
+      itens.push({
+        produtoNome: p.produtoId?.name || 'Produto',
+        quantidade: p.quantidade || 1,
+        precoUnitario: p.preco ? (p.preco / (p.quantidade || 1)) : 0,
+        precoTotal: p.preco || 0
+      });
+    }
+  }
 
   const { numeroNota, caminho } = await gerarNotaFiscal({
     cliente,

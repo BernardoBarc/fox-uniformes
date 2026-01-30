@@ -609,60 +609,60 @@ export default function DashboardPage() {
     setMessage(null);
 
     try {
-      // Calcular desconto proporcional para cada item se houver cupom
-      const descontoProporcional = cupomAplicado 
-        ? (cupomAplicado.desconto / 100) 
-        : 0;
+      // preparar payload único para todo o carrinho
+      const itemsPayload = carrinho.map(it => ({
+        produtoId: it.produtoId,
+        tamanho: it.tamanho,
+        quantidade: it.quantidade,
+        precoUnitario: it.precoUnitario,
+        precoTotal: it.precoTotal,
+        observacoes: it.observacoes || undefined,
+      }));
 
-      // Criar um pedido para cada item do carrinho
-      const pedidosCriados = [];
-      for (const item of carrinho) {
-        const precoComDesconto = cupomAplicado 
-          ? item.precoTotal - (item.precoTotal * descontoProporcional)
-          : item.precoTotal;
+      // escolher primeira foto encontrada como imagem principal (compatibilidade com upload.single)
+      const firstPhotoFile = carrinho.find(it => it.foto)?.foto || null;
 
-        const formData = new FormData();
-        formData.append("nomeCliente", novoPedido.nomeCliente);
-        formData.append("cpfCliente", novoPedido.cpfCliente.replace(/\D/g, ""));
-        formData.append("telefoneCliente", novoPedido.telefoneCliente);
-        formData.append("clienteId", clienteSelecionado._id);
-        formData.append("produtoId", item.produtoId);
-        formData.append("tamanho", item.tamanho);
-        formData.append("quantidade", item.quantidade.toString());
-        formData.append("preco", precoComDesconto.toString());
-        formData.append("precoOriginal", item.precoTotal.toString());
-        // entrega removida: será definida posteriormente por outro fluxo
-        formData.append("observacoes", item.observacoes);
-        formData.append("vendedorId", userData?.id || "");
-        formData.append("status", "Aguardando Pagamento");
-        
-        if (cupomAplicado) {
-          formData.append("cupomAplicado", cupomAplicado._id);
-          formData.append("descontoAplicado", (item.precoTotal * descontoProporcional).toString());
-        }
-        
-        if (item.foto) {
-          formData.append("photo", item.foto);
-        }
+      const formData = new FormData();
+      formData.append("nomeCliente", novoPedido.nomeCliente);
+      formData.append("cpfCliente", novoPedido.cpfCliente.replace(/\D/g, ""));
+      formData.append("telefoneCliente", novoPedido.telefoneCliente || "");
+      formData.append("clienteId", clienteSelecionado._id);
+      formData.append("vendedorId", userData?.id || "");
+      formData.append("status", "Aguardando Pagamento");
 
-        const response = await fetch(`${API_URL}/pedidos`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${getToken()}`,
-          },
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Erro ao criar pedido");
-        }
-
-        const pedidoCriado = await response.json();
-        pedidosCriados.push(pedidoCriado);
+      // preços e cupom
+      formData.append("preco", totalFinal.toString());
+      formData.append("precoOriginal", totalCarrinho.toString());
+      if (cupomAplicado) {
+        formData.append("cupomAplicado", cupomAplicado._id);
+        // enviar desconto total em reais
+        const descontoTotal = ((cupomAplicado.desconto / 100) * totalCarrinho);
+        formData.append("descontoAplicado", descontoTotal.toString());
       }
 
-      // Se cupom foi aplicado, incrementar uso
+      // anexar items como JSON
+      formData.append("items", JSON.stringify(itemsPayload));
+
+      if (firstPhotoFile) {
+        formData.append("photo", firstPhotoFile);
+      }
+
+      const response = await fetch(`${API_URL}/pedidos`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${getToken()}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Erro ao criar pedido");
+      }
+
+      const pedidoCriado = await response.json();
+
+      // se cupom aplicado, registrar uso
       if (cupomAplicado) {
         try {
           await fetch(`${API_URL}/cupons/${cupomAplicado._id}/aplicar`, {
@@ -670,19 +670,19 @@ export default function DashboardPage() {
             headers: getAuthHeaders(),
             body: JSON.stringify({ clienteId: clienteSelecionado._id }),
           });
-        } catch (error) {
+        } catch (err) {
           console.warn("Aviso: Erro ao registrar uso do cupom");
         }
       }
 
-      // Gerar link de pagamento e enviar via WhatsApp
+      // tentar gerar link de pagamento
       try {
         const pagamentoResponse = await fetch(`${API_URL}/pagamento/criar`, {
           method: "POST",
           headers: getAuthHeaders(),
           body: JSON.stringify({
             clienteId: clienteSelecionado._id,
-            pedidos: pedidosCriados.map(p => p._id || p.pedido?._id),
+            pedidos: [pedidoCriado._id || pedidoCriado.pedido?._id],
             valorTotal: totalFinal,
             telefone: novoPedido.telefoneCliente,
             nomeCliente: novoPedido.nomeCliente,
@@ -690,17 +690,14 @@ export default function DashboardPage() {
         });
 
         if (!pagamentoResponse.ok) {
-          console.warn("Aviso: Link de pagamento não foi gerado, mas pedidos foram criados.");
+          console.warn("Aviso: Link de pagamento não foi gerado, mas pedido foi criado.");
         }
       } catch (pagamentoError) {
         console.warn("Aviso: Erro ao gerar link de pagamento:", pagamentoError);
       }
 
-      const mensagemSucesso = cupomAplicado 
-        ? `Venda finalizada com desconto de ${cupomAplicado.desconto}%! ${carrinho.length} pedido(s) criado(s). Link de pagamento enviado para o email do cliente.`
-        : `Venda finalizada! ${carrinho.length} pedido(s) criado(s) com sucesso! Link de pagamento enviado para o email do cliente.`;
-
-      setMessage({ type: "success", text: mensagemSucesso });
+      setMessage({ type: "success", text: "Venda finalizada! Pedido criado com sucesso." });
+      // reset estado
       setNovoPedido({ nomeCliente: "", cpfCliente: "", telefoneCliente: "" });
       setClienteSelecionado(null);
       setCarrinho([]);

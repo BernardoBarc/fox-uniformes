@@ -1,5 +1,32 @@
 import mongoose from 'mongoose';
 
+const itemSchema = new mongoose.Schema({
+    produtoId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Produto',
+        required: true
+    },
+    tamanho: {
+        type: String,
+        enum: ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'Único'],
+        required: true
+    },
+    quantidade: {
+        type: Number,
+        required: true
+    },
+    precoUnitario: {
+        type: Number,
+        required: true
+    },
+    precoTotal: {
+        type: Number,
+        required: true
+    },
+    observacoes: String,
+    photo: String
+});
+
 const pedidoSchema = new mongoose.Schema({
     nomeCliente: {
         type: String,
@@ -15,19 +42,9 @@ const pedidoSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    produtoId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Produto',
-        required: true
-    },
-    tamanho: {
-        type: String,
-        required: true,
-        enum: ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'Único']
-    },
-    quantidade: {
-        type: Number,
-        required: true
+    items: {
+        type: [itemSchema],
+        required: false
     },
     status: {
         type: String,
