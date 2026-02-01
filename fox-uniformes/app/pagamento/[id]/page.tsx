@@ -60,6 +60,53 @@ export default function PagamentoPage() {
 
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
 
+  // Estado para feedback de cópia do PIX
+  const [copiedPix, setCopiedPix] = useState(false);
+
+  // Função robusta para copiar texto para a área de transferência (Clipboard API com fallback)
+  const handleCopyPix = async () => {
+    try {
+      const text = pixData?.copiaECola;
+      if (!text) return;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback: textarea + execCommand
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        // evitar mostrar o textarea na tela
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+
+      setCopiedPix(true);
+      setTimeout(() => setCopiedPix(false), 2000);
+    } catch (err) {
+      console.error('Erro ao copiar PIX (handleCopyPix):', err);
+      // tentar fallback simples
+      try {
+        const text = pixData?.copiaECola || '';
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        setCopiedPix(true);
+        setTimeout(() => setCopiedPix(false), 2000);
+      } catch (e) {
+        console.error('Fallback de cópia falhou:', e);
+      }
+    }
+  };
+
   const [cardForm, setCardForm] = useState({
     cardNumber: "",
     cardholderName: "",
@@ -384,8 +431,15 @@ export default function PagamentoPage() {
             className="mx-auto mb-4 w-44 h-44 object-contain img-rounded"
             alt="QR Pix"
           />
-          <div className="bg-soft p-3 rounded text-sm break-all kv-muted">
-            {pixData.copiaECola}
+          <div className="bg-soft p-3 rounded text-sm kv-muted flex items-center justify-between gap-2">
+            <div className="break-all pr-4 text-left text-sm">{pixData.copiaECola}</div>
+            <button
+              type="button"
+              onClick={handleCopyPix}
+              className="ml-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md text-sm"
+            >
+              {copiedPix ? 'Copiado' : 'Copiar'}
+            </button>
           </div>
           <p className="text-xs kv-muted mt-2">Aguardando confirmação automática…</p>
         </div>
@@ -399,7 +453,9 @@ export default function PagamentoPage() {
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold kv-accent mb-2">🦊 Fox Uniformes</h1>
+          <h1 className="text-3xl font-bold kv-accent mb-2">
+            <img src="/logoAmarelo.png" alt="Fox Uniformes" className="mx-auto mb-2 h-12" />
+          </h1>
           <p className="kv-muted">Finalize seu pagamento</p>
         </div>
 

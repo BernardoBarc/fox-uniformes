@@ -24,13 +24,39 @@ const findByLogin = async (login) => {
     return await userRepository.findByLogin(login);
 }
 
+// Novas funções para reset de senha
+const findByEmail = async (email) => {
+    return await userRepository.findByEmail(email);
+}
+
+const saveResetToken = async (id, token, expires) => {
+    return await userRepository.saveResetToken(id, token, expires);
+}
+
+const findByResetToken = async (token) => {
+    return await userRepository.findByResetToken(token);
+}
+
+const updatePassword = async (id, hashedPassword) => {
+    return await userRepository.updatePassword(id, hashedPassword);
+}
+
+const clearResetToken = async (id) => {
+    return await userRepository.clearResetToken(id);
+}
+
 const userService = {
     getUser,
     getAllUsers,
     saveUser,
     updateUser,
     deleteUser,
-    findByLogin
+    findByLogin,
+    findByEmail,
+    saveResetToken,
+    findByResetToken,
+    updatePassword,
+    clearResetToken
 };
 
 export default userService;

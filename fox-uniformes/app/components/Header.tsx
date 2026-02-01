@@ -1,11 +1,14 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Button from "./Button";
 import { API_URL } from "../config/api";
 
 export default function Header({ user, onLogout }: { user?: { login?: string; name?: string }, onLogout?: () => void }) {
   const router = useRouter();
+  const pathname = usePathname();
+  // Esconder Header na página de acompanhamento, na root (login) e em Esqueci-senha
+  if (pathname && (pathname === '/' || pathname.startsWith('/acompanhar') || pathname === '/Esqueci-senha')) return null;
   const [fetchedUser, setFetchedUser] = useState<{ login?: string; name?: string } | null>(null);
 
   useEffect(() => {

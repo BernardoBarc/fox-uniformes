@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import connectDB from './database/database.js';
 import router from './routes/router.js';
+import authController from './routes/authController.js';
 
 dotenv.config();
 connectDB();
@@ -61,6 +62,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/notas_fiscais', express.static(path.join(__dirname, 'notas_fiscais')));
 
 app.use('/', router);
+app.use('/api', authController);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

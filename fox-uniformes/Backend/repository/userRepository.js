@@ -51,13 +51,59 @@ const findByLogin = async (login) => {
     }
 }
 
+// Novos métodos para recuperação de senha
+const findByEmail = async (email) => {
+    try {
+        return await user.findOne({ email });
+    } catch (error) {
+        throw new Error(error);
+    }
+}
+
+const saveResetToken = async (id, token, expires) => {
+    try {
+        return await user.findByIdAndUpdate(id, { resetToken: token, resetExpires: expires }, { new: true });
+    } catch (error) {
+        throw new Error(error);
+    }
+}
+
+const findByResetToken = async (token) => {
+    try {
+        return await user.findOne({ resetToken: token, resetExpires: { $gt: new Date() } });
+    } catch (error) {
+        throw new Error(error);
+    }
+}
+
+const updatePassword = async (id, hashedPassword) => {
+    try {
+        return await user.findByIdAndUpdate(id, { password: hashedPassword }, { new: true });
+    } catch (error) {
+        throw new Error(error);
+    }
+}
+
+const clearResetToken = async (id) => {
+    try {
+        return await user.findByIdAndUpdate(id, { resetToken: null, resetExpires: null }, { new: true });
+    } catch (error) {
+        throw new Error(error);
+    }
+}
+
 const userRepository = {
     getUser,
     getAllUsers,
     findByLogin,
     saveUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    findByEmail,
+    saveResetToken,
+    findByResetToken,
+    updatePassword,
+    clearResetToken
 };
 
 export default userRepository;

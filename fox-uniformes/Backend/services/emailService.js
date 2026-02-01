@@ -1,10 +1,30 @@
 import { Resend } from 'resend';
 import fs from 'fs';
+import path from 'path';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const EMAIL_FROM =
   process.env.EMAIL_FROM || 'Fox Uniformes <onboarding@resend.dev>';
+
+// URL pública onde o frontend serve os assets (ex.: https://meusite.com)
+const LOGO_URL = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL.replace(/\/$/, '')}/logoAmarelo.png` : null;
+
+// Tenta ler a logo local em /public e criar uma data URI caso não exista FRONTEND_URL
+let LOGO_DATA_URI = null;
+try {
+  const localLogoPath = path.join(process.cwd(), 'public', 'logoAmarelo.png');
+  if (!LOGO_URL && fs.existsSync(localLogoPath)) {
+    const buf = fs.readFileSync(localLogoPath);
+    LOGO_DATA_URI = `data:image/png;base64,${buf.toString('base64')}`;
+  }
+} catch (e) {
+  console.warn('[EMAIL] Não foi possível ler logo local:', e && e.message ? e.message : e);
+}
+
+const LOGO_IMG_HTML = LOGO_URL
+  ? `<img src="${LOGO_URL}" alt="Fox Uniformes" style="height:48px;display:inline-block;" />`
+  : (LOGO_DATA_URI ? `<img src="${LOGO_DATA_URI}" alt="Fox Uniformes" style="height:48px;display:inline-block;" />` : '');
 
 /**
  * Envia e-mail com link de pagamento / PIX
@@ -31,6 +51,9 @@ const enviarLinkPagamento = async ({
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <div style="text-align:center;margin-bottom:12px;">
+        ${LOGO_IMG_HTML}
+      </div>
       <h2>Olá, ${nome} 👋</h2>
 
       <p>Recebemos seu pedido. O pagamento ainda está pendente.</p>
@@ -85,7 +108,7 @@ const enviarLinkPagamento = async ({
     await resend.emails.send({
       from: EMAIL_FROM,
       to: para,
-      subject: '🦊 Fox Uniformes - Link de Pagamento',
+      subject: 'Fox Uniformes - Link de Pagamento',
       html,
     });
 
@@ -123,6 +146,9 @@ const enviarNotaFiscal = async ({
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px;">
+        <div style="text-align:center;margin-bottom:12px;">
+          ${LOGO_IMG_HTML}
+        </div>
         <h2>Olá, ${nome} 👋</h2>
 
         <p>Seu pagamento foi <strong>confirmado com sucesso</strong> 🎉</p>
@@ -167,7 +193,7 @@ const enviarNotaFiscal = async ({
     await resend.emails.send({
       from: EMAIL_FROM,
       to: para,
-      subject: `🧾 Nota Fiscal - Nº ${numeroNota}`,
+      subject: `Nota Fiscal - Nº ${numeroNota}`,
       html,
       attachments: [
         {
@@ -211,6 +237,9 @@ const enviarCupom = async ({
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <div style="text-align:center;margin-bottom:12px;">
+        ${LOGO_IMG_HTML}
+      </div>
       <h2>Olá, ${nome} 👋</h2>
 
       <p>Você recebeu um <strong>CUPOM DE DESCONTO de ${desconto}%</strong> para usar na Fox Uniformes!</p>
@@ -249,7 +278,7 @@ const enviarCupom = async ({
     await resend.emails.send({
       from: EMAIL_FROM,
       to: para,
-      subject: '🦊 Fox Uniformes - Cupom de Desconto',
+      subject: 'Fox Uniformes - Cupom de Desconto',
       html,
     });
     console.log(`📧 Cupom enviado para ${para}`);
@@ -258,8 +287,57 @@ const enviarCupom = async ({
   }
 };
 
+/**
+ * Envia e-mail específico para recuperação de senha com link temporário
+ */
+const enviarRecuperacaoSenha = async ({ para, nome, linkReset, prazoHoras = 1 }) => {
+  console.log('[EMAIL] Envio recuperação de senha:', { para, linkReset });
+
+  if (!para) {
+    console.warn('[EMAIL] Cliente sem e-mail, envio ignorado');
+    return;
+  }
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <div style="text-align:center;margin-bottom:12px;">
+        ${LOGO_IMG_HTML}
+      </div>
+      <h2>Olá, ${nome || 'usuário'}.</h2>
+
+      <p>Recebemos uma solicitação para redefinir a sua senha. Clique no botão abaixo para definir uma nova senha.</p>
+
+      <p style="margin-top:8px;">
+        <a href="${linkReset}"
+           style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">
+          Redefinir minha senha
+        </a>
+      </p>
+
+      <p style="font-size:13px;color:#666;margin-top:10px;">Este link expira em ${prazoHoras} hora(s). Se você não solicitou, ignore este e-mail.</p>
+
+      <hr />
+      <p style="font-size:12px;color:#777;">Fox Uniformes • Este é um e-mail automático</p>
+    </div>
+  `;
+
+  try {
+    await resend.emails.send({
+      from: EMAIL_FROM,
+      to: para,
+      subject: 'Recuperação de senha - Fox Uniformes',
+      html,
+    });
+
+    console.log(`📧 Email de recuperação enviado para ${para}`);
+  } catch (err) {
+    console.error('❌ Erro ao enviar e-mail de recuperação:', err);
+  }
+};
+
 export default {
   enviarLinkPagamento,
   enviarNotaFiscal,
   enviarCupom,
+  enviarRecuperacaoSenha,
 };

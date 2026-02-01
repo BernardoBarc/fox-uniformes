@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { API_URL } from "../config/api";
-import Header from "../components/Header";
 import Button from "../components/Button";
 
 interface Produto {
@@ -198,7 +197,14 @@ export default function AcompanharPedidosPage() {
 
   return (
     <div className="min-h-screen bg-app text-app">
-      <Header />
+      {/* Cabeçalho simplificado: ícone + nome centralizados (remove duplicação) */}
+      <header className="w-full py-6">
+        <div className="max-w-4xl mx-auto flex items-center justify-center gap-4">
+          <img src="/logoAmarelo.png" alt="Fox Uniformes" className="h-12 w-auto" />
+          <span className="text-2xl sm:text-3xl font-semibold kv-accent">Fox Uniformes</span>
+        </div>
+      </header>
+
       <main className="container-responsive max-w-4xl mx-auto px-4 py-8">
         {/* Título */}
         <div className="text-center mb-8">
