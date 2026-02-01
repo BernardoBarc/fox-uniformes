@@ -62,7 +62,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/notas_fiscais', express.static(path.join(__dirname, 'notas_fiscais')));
 
 app.use('/', router);
-app.use('/api', authController);
+// Expor rotas de auth em '/auth' e '/api/auth' para compatibilidade com clientes
+app.use('/auth', authController);
+app.use('/api/auth', authController);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

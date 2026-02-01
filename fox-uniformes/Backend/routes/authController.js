@@ -6,8 +6,8 @@ import emailService from '../services/emailService.js';
 
 const router = express.Router();
 
-// POST /auth/esqueci-senha
-router.post('/auth/esqueci-senha', async (req, res) => {
+// POST /esqueci-senha  (montado em /auth => /auth/esqueci-senha)
+router.post('/esqueci-senha', async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email obrigatório' });
@@ -40,8 +40,8 @@ router.post('/auth/esqueci-senha', async (req, res) => {
   }
 });
 
-// POST /auth/reset-senha
-router.post('/auth/reset-senha', async (req, res) => {
+// POST /reset-senha  (montado em /auth => /auth/reset-senha)
+router.post('/reset-senha', async (req, res) => {
   try {
     const { token, senha } = req.body;
     if (!token || !senha) return res.status(400).json({ error: 'Token e senha são obrigatórios' });

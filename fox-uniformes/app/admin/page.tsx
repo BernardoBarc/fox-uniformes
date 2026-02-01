@@ -384,10 +384,21 @@ export default function AdminDashboardPage() {
       return;
     }
     try {
+      const payload: any = {
+        name: novoVendedor.name,
+        login: novoVendedor.login,
+        email: novoVendedor.email,
+        telefone: novoVendedor.telefone,
+        endereco: novoVendedor.endereco,
+        dataNascimento: novoVendedor.dataNascimento || undefined,
+        password: novoVendedor.password,
+        role: 'vendedor'
+      };
+
       const response = await fetch(`${API_URL}/users`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ ...novoVendedor, role: 'vendedor' }),
+        body: JSON.stringify(payload),
       });
       if (response.ok) {
         setMessage({ type: 'success', text: 'Vendedor cadastrado com sucesso!' });
@@ -937,6 +948,7 @@ export default function AdminDashboardPage() {
                     <input className="input-gold" placeholder="Login" value={novoVendedor.login} onChange={e => setNovoVendedor(s => ({ ...s, login: e.target.value }))} />
                     <input className="input-gold" placeholder="Email" value={novoVendedor.email} onChange={e => setNovoVendedor(s => ({ ...s, email: e.target.value }))} />
                     <input className="input-gold" placeholder="Telefone" value={novoVendedor.telefone} onChange={e => setNovoVendedor(s => ({ ...s, telefone: e.target.value }))} />
+                    <input className="input-gold" type="date" placeholder="Data de Nascimento" value={novoVendedor.dataNascimento} onChange={e => setNovoVendedor(s => ({ ...s, dataNascimento: e.target.value }))} />
                     <input className="input-gold" placeholder="Senha (deixe em branco para manter)" type="password" value={novoVendedor.password} onChange={e => setNovoVendedor(s => ({ ...s, password: e.target.value }))} />
                     <input className="input-gold" placeholder="Confirmar Senha" type="password" value={novoVendedor.confirmPassword} onChange={e => setNovoVendedor(s => ({ ...s, confirmPassword: e.target.value }))} />
                     <div className="col-span-full flex gap-2"><Button variant="gold" type="submit">{editVendedorId ? 'Salvar' : 'Criar'}</Button><Button variant="ghost" onClick={() => { setActiveTab('vendedores'); setEditVendedorId(null); setNovoVendedor({ name: '', login: '', email: '', telefone: '', endereco: '', dataNascimento: '', password: '', confirmPassword: '' }); }}>Cancelar</Button></div>
