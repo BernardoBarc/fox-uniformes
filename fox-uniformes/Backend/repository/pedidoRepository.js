@@ -60,19 +60,132 @@ const addBusinessDays = (startDate, days) => {
     return date;
 };
 
+// Adiciona dias úteis preservando o horário/hora do startDate
+const addBusinessDaysKeepTime = (startDate, days) => {
+    const date = new Date(startDate);
+    let added = 0;
+    while (added < days) {
+        date.setDate(date.getDate() + 1);
+        const day = date.getDay();
+        if (day !== 0 && day !== 6) {
+            added++;
+        }
+    }
+    // preserva horas, minutos, segundos e ms do startDate
+    return date;
+};
+
+// Retorna se o dia é útil (segunda a sexta)
+const isBusinessDay = (d) => {
+    const day = d.getDay();
+    return day !== 0 && day !== 6;
+};
+
+// Retorna a próxima data útil (sem horário) iniciando às workStartHour
+const nextBusinessDayStart = (d, workStartHour = 9) => {
+    const date = new Date(d);
+    // move para próximo dia
+    date.setDate(date.getDate() + 1);
+    // avança até dia útil
+    while (!isBusinessDay(date)) date.setDate(date.getDate() + 1);
+    date.setHours(workStartHour, 0, 0, 0);
+    return date;
+};
+
+// Ajusta para o início do dia útil atual (workStartHour) se antes do horário
+const startOfBusinessDay = (d, workStartHour = 9) => {
+    const date = new Date(d);
+    date.setHours(workStartHour, 0, 0, 0);
+    return date;
+};
+
+// Adiciona horas úteis a uma data, respeitando janela diária (workStartHour..workEndHour) e pulando finais de semana
+const addBusinessTime = (startDate, hoursToAdd, workStartHour = 9, workEndHour = 18) => {
+    let remaining = Number(hoursToAdd) || 0;
+    if (remaining <= 0) return new Date(startDate);
+
+    let current = new Date(startDate);
+
+    // Se não for dia útil, avançar para próximo dia útil às workStartHour
+    if (!isBusinessDay(current)) {
+        current = nextBusinessDayStart(current, workStartHour);
+    }
+
+    // Se antes do horário de trabalho, ajustar para início do expediente
+    const todayStart = new Date(current);
+    todayStart.setHours(workStartHour, 0, 0, 0);
+    const todayEnd = new Date(current);
+    todayEnd.setHours(workEndHour, 0, 0, 0);
+
+    if (current < todayStart) {
+        current = new Date(todayStart);
+    } else if (current >= todayEnd) {
+        // inicia no próximo dia útil às 09:00
+        current = nextBusinessDayStart(current, workStartHour);
+    }
+
+    while (remaining > 0) {
+        // garante limites do dia atual
+        const endOfToday = new Date(current);
+        endOfToday.setHours(workEndHour, 0, 0, 0);
+
+        const availableMs = endOfToday - current;
+        const availableHours = Math.max(0, availableMs / (1000 * 60 * 60));
+
+        if (availableHours <= 0) {
+            // avança para próximo dia útil
+            current = nextBusinessDayStart(current, workStartHour);
+            continue;
+        }
+
+        const take = Math.min(availableHours, remaining);
+        current = new Date(current.getTime() + take * 60 * 60 * 1000);
+        remaining -= take;
+
+        // se ainda resta, avançar para próximo dia útil às workStartHour
+        if (remaining > 0) {
+            current = nextBusinessDayStart(current, workStartHour);
+        }
+    }
+
+    return current;
+};
+
 // Estima a entrega com base no total de peças do pedido (totalPieces)
 const estimateEntregaFromPieces = (totalPieces) => {
     const pieces = Number(totalPieces) || 0;
-    // 1.5 hora por peça
-    const totalHours = pieces * 1.5;
-    // converte em dias úteis (8 horas por dia)
-    const daysForWork = totalHours / 8;
-    // arredonda para cima dias completos de trabalho
-    const roundedWorkDays = Math.ceil(daysForWork || 0);
-    // adiciona 1 dia extra para logística/entrega
-    const totalBusinessDays = roundedWorkDays + 1;
-    // calcula data final pulando fins de semana
-    const entregaDate = addBusinessDays(new Date(), totalBusinessDays);
+    // 2.5 horas por peça
+    const totalHours = pieces * 2.5;
+    // janela de trabalho: 09:00 - 18:00 (9 horas por dia úteis)
+    const workDayHours = 9;
+
+    // Determina o início da produção: se agora estiver fora do expediente, começa no próximo dia útil às 09:00
+    const now = new Date();
+    let start = new Date(now);
+
+    // se hoje não for dia útil -> próximo dia útil às 09:00
+    if (!isBusinessDay(start)) {
+        start = nextBusinessDayStart(start, 9);
+    } else {
+        // hoje é dia útil -> checar horário
+        const todayStart = new Date(start);
+        todayStart.setHours(9,0,0,0);
+        const todayEnd = new Date(start);
+        todayEnd.setHours(18,0,0,0);
+
+        if (start < todayStart) {
+            start = todayStart;
+        } else if (start >= todayEnd) {
+            // inicia no próximo dia útil às 09:00
+            start = nextBusinessDayStart(start, 9);
+        }
+    }
+
+    // Se não houver peças (0), considerar 0 horas de produção -> entrega = próximo dia útil + 1 dia logístico
+    const productionEnd = addBusinessTime(start, totalHours, 9, 18);
+
+    // adicionar 1 dia útil para logística/entrega preservando horário do fim de produção
+    const entregaDate = addBusinessDaysKeepTime(productionEnd, 1);
     return entregaDate.toISOString();
 };
 

@@ -2,7 +2,7 @@ import trajeto from '../models/trajeto.js';
 
 const getTrajeto = async (id) => {
     try {
-        return await trajeto.findById(id);
+        return await trajeto.findById(id).populate('vendedorId', '_id name login');
     } catch (error) {
         throw new Error(error);
     }
@@ -10,7 +10,7 @@ const getTrajeto = async (id) => {
 
 const getAllTrajetos = async () => {
     try {
-        const trajetos = await trajeto.find().populate('vendedorId', 'name login');
+        const trajetos = await trajeto.find().populate('vendedorId', '_id name login');
         return trajetos;
     } catch (error) {
         throw new Error(error);
@@ -19,7 +19,7 @@ const getAllTrajetos = async () => {
 
 const getTrajetosByVendedor = async (vendedorId) => {
     try {
-        const trajetos = await trajeto.find({ vendedorId }).populate('vendedorId', 'name login');
+        const trajetos = await trajeto.find({ vendedorId }).populate('vendedorId', '_id name login');
         return trajetos;
     } catch (error) {
         throw new Error(error);
@@ -30,7 +30,7 @@ const saveTrajeto = async (trajetoData) => {
     try {
         const newTrajeto = new trajeto(trajetoData);
         await newTrajeto.save();
-        return newTrajeto;
+        return await newTrajeto.populate('vendedorId', '_id name login');
     } catch (error) {
         throw new Error(error);
     }
@@ -38,7 +38,7 @@ const saveTrajeto = async (trajetoData) => {
 
 const updateTrajeto = async (id, trajetoData) => {
     try {
-        const updatedTrajeto = await trajeto.findByIdAndUpdate(id, trajetoData, {new: true});
+        const updatedTrajeto = await trajeto.findByIdAndUpdate(id, trajetoData, {new: true}).populate('vendedorId', '_id name login');
         return updatedTrajeto;
     } catch (error) {
         throw new Error(error);

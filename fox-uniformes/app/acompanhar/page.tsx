@@ -162,6 +162,16 @@ export default function AcompanharPedidosPage() {
     }
   };
 
+  // Formatar data de entrega em formato legível: 'Ter, 10 fev 2026 — 11:30'
+  const formatEntrega = (isoString?: string | null) => {
+    if (!isoString) return '—';
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return '—';
+    const datePart = d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+    const timePart = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `${datePart} — ${timePart}`;
+  };
+
   // Timeline do pedido
   const getTimeline = (status: string) => {
     const etapas = [
@@ -368,7 +378,7 @@ export default function AcompanharPedidosPage() {
                       <div>
                         <p className="text-gray-500">Entrega</p>
                         <p className="text-white font-medium">
-                          {new Date(pedido.entrega).toLocaleDateString("pt-BR")}
+                          {formatEntrega(pedido.entrega)}
                         </p>
                       </div>
                       {pedido.produtoId?.categoria && (

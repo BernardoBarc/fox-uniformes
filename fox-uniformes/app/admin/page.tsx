@@ -133,6 +133,43 @@ export default function AdminDashboardPage() {
   // Trajetos - novo estado para criação rápida
   const [showNovoTrajeto, setShowNovoTrajeto] = useState(false);
   const [novoTrajeto, setNovoTrajeto] = useState({ nomeCliente: "", cidade: "", estado: "", rua: "", bairro: "", cep: "", dataVisita: "" });
+  const [editTrajetoId, setEditTrajetoId] = useState<string | null>(null);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
+
+  const lookupCep = async (cepRaw: string) => {
+    const cep = (cepRaw || '').toString().replace(/\D/g, '');
+    if (cep.length !== 8) {
+      setCepError('CEP deve ter 8 dígitos');
+      return;
+    }
+    setCepError(null);
+    setCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (!res.ok) {
+        setCepError('Erro ao consultar CEP');
+        return;
+      }
+      const data = await res.json();
+      if (data.erro) {
+        setCepError('CEP não encontrado');
+        return;
+      }
+      setNovoTrajeto(s => ({
+        ...s,
+        cidade: data.localidade || s.cidade,
+        estado: data.uf || s.estado,
+        rua: s.rua || data.logradouro || s.rua,
+        bairro: s.bairro || data.bairro || s.bairro,
+      }));
+    } catch (err) {
+      console.error('Erro lookup CEP:', err);
+      setCepError('Erro ao validar CEP');
+    } finally {
+      setCepLoading(false);
+    }
+  };
 
   // Estados para formulários
   const [novoVendedor, setNovoVendedor] = useState({
@@ -538,22 +575,62 @@ export default function AdminDashboardPage() {
       if (novoTrajeto.dataVisita) {
         const iso = parseDateToISO(novoTrajeto.dataVisita);
         if (!iso) {
-          setMessage({ type: 'error', text: 'Formato de data inválido. Use DD/MM/YYYY.' });
+          setMessage({ type: 'error', text: 'Formato de data inválido. Use o campo de calendário.' });
           setLoading(false);
           return;
         }
         payload.dataVisita = iso;
       }
 
-      const response = await fetch(`${API_URL}/trajetos`, { method: "POST", headers: getAuthHeaders(), body: JSON.stringify(payload) });
-      if (response.ok) { setMessage({ type: "success", text: "Trajeto criado com sucesso!" }); setNovoTrajeto({ nomeCliente: "", cidade: "", estado: "", rua: "", bairro: "", cep: "", dataVisita: "" }); setShowNovoTrajeto(false); fetchTrajetos(); } else { const err = await response.json(); setMessage({ type: "error", text: err.error || "Erro ao criar trajeto" }); }
-    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); } finally { setLoading(false); }
+      let response;
+      if (editTrajetoId) {
+        // edição
+        response = await fetch(`${API_URL}/trajeto/${editTrajetoId}`, { method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Trajeto atualizado com sucesso!' });
+          setEditTrajetoId(null);
+        } else {
+          const err = await response.json().catch(() => ({}));
+          setMessage({ type: 'error', text: err.error || 'Erro ao atualizar trajeto' });
+        }
+      } else {
+        // criação
+        response = await fetch(`${API_URL}/trajeto`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Trajeto criado com sucesso!' });
+        } else {
+          const err = await response.json().catch(() => ({}));
+          setMessage({ type: 'error', text: err.error || 'Erro ao criar trajeto' });
+        }
+      }
+
+      if (response && response.ok) {
+        setNovoTrajeto({ nomeCliente: '', cidade: '', estado: '', rua: '', bairro: '', cep: '', dataVisita: '' });
+        setShowNovoTrajeto(false);
+        fetchTrajetos();
+      }
+    } catch (err) { setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' }); } finally { setLoading(false); }
+  };
+
+  const handleEditarTrajeto = (t: Trajeto) => {
+    setNovoTrajeto({
+      nomeCliente: t.nomeCliente || '',
+      cidade: t.cidade || '',
+      estado: t.estado || '',
+      rua: t.rua || '',
+      bairro: t.bairro || '',
+      cep: t.cep || '',
+      dataVisita: t.dataVisita ? new Date(t.dataVisita).toISOString().split('T')[0] : '',
+    });
+    setEditTrajetoId(t._id);
+    setShowNovoTrajeto(true);
+    setActiveTab('trajetos');
   };
 
   const handleDeletarTrajeto = async (trajetoId: string) => {
     if (!confirm("Tem certeza que deseja excluir este trajeto?")) return;
     try {
-      const response = await fetch(`${API_URL}/trajetos/${trajetoId}`, { method: "DELETE", headers: getAuthHeaders() });
+      const response = await fetch(`${API_URL}/trajeto/${trajetoId}`, { method: "DELETE", headers: getAuthHeaders() });
       if (response.ok) { setMessage({ type: "success", text: "Trajeto excluído com sucesso!" }); fetchTrajetos(); } else setMessage({ type: "error", text: "Erro ao excluir trajeto" });
     } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
   };
@@ -872,27 +949,42 @@ export default function AdminDashboardPage() {
                         <input className="input-gold" placeholder="Estado" value={novoTrajeto.estado} onChange={e => setNovoTrajeto(s => ({ ...s, estado: e.target.value }))} />
                         <input className="input-gold md:col-span-2" placeholder="Rua" value={novoTrajeto.rua} onChange={e => setNovoTrajeto(s => ({ ...s, rua: e.target.value }))} />
                         <input className="input-gold" placeholder="Bairro" value={novoTrajeto.bairro} onChange={e => setNovoTrajeto(s => ({ ...s, bairro: e.target.value }))} />
-                        <input className="input-gold" placeholder="CEP" value={novoTrajeto.cep} onChange={e => setNovoTrajeto(s => ({ ...s, cep: e.target.value }))} />
-                        <input className="input-gold" placeholder="Data Visita (DD/MM/AAAA)" value={novoTrajeto.dataVisita} onChange={e => setNovoTrajeto(s => ({ ...s, dataVisita: e.target.value }))} />
-                        <div className="col-span-full md:col-span-3 flex gap-2"><Button variant="gold" type="submit">Criar Trajeto</Button><Button variant="ghost" onClick={() => setShowNovoTrajeto(false)}>Cancelar</Button></div>
+                        <input className="input-gold" placeholder="CEP" value={novoTrajeto.cep} onChange={e => {
+                          const v = e.target.value;
+                          setNovoTrajeto(s => ({ ...s, cep: v }));
+                          const digits = v.replace(/\D/g, '');
+                          if (digits.length === 8) lookupCep(v);
+                        }} />
+                        {cepLoading && <div className="text-sm kv-muted mt-1">Buscando CEP...</div>}
+                        {cepError && <div className="text-sm text-red-400 mt-1">{cepError}</div>}
+                        <input className="input-gold" type="date" placeholder="Data Visita" value={novoTrajeto.dataVisita} onChange={e => setNovoTrajeto(s => ({ ...s, dataVisita: e.target.value }))} />
+                        <div className="col-span-full md:col-span-3 flex gap-2">
+                          <Button variant="gold" type="submit">{editTrajetoId ? 'Salvar' : 'Criar Trajeto'}</Button>
+                          <Button variant="ghost" onClick={() => { setShowNovoTrajeto(false); setEditTrajetoId(null); setNovoTrajeto({ nomeCliente: '', cidade: '', estado: '', rua: '', bairro: '', cep: '', dataVisita: '' }); }}>Cancelar</Button>
+                        </div>
                       </form>
                     </div>
                   )}
 
                   <div className="bg-card p-4 rounded space-y-2">
-                    {trajetos.map(t => (
-                      <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
-                        <div>
-                          <div className="font-medium">{t.nomeCliente}</div>
-                          <div className="text-sm kv-muted">{t.cidade} - {t.estado}</div>
+                    {trajetos.map(t => {
+                      const ownerId = (t as any).vendedorId?._id || (t as any).vendedorId;
+                      const canManage = userData?.role === 'admin' || (userData?.role === 'vendedor' && String(ownerId) === String(userData.id));
+                      return (
+                        <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                          <div>
+                            <div className="font-medium">{t.nomeCliente}</div>
+                            <div className="text-sm kv-muted">{t.cidade} - {t.estado}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm kv-muted">{new Date(t.createdAt).toLocaleDateString()}</div>
+                            {canManage && <Button variant="ghost" onClick={() => handleEditarTrajeto(t)}>Editar</Button>}
+                            {canManage && <Button variant="primary" onClick={() => { if (confirm('Tem certeza que deseja excluir este trajeto?')) handleDeletarTrajeto(t._id); }}>Excluir</Button>}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-sm kv-muted">{new Date(t.createdAt).toLocaleDateString()}</div>
-                          <Button variant="primary" onClick={() => handleDeletarTrajeto(t._id)}>Excluir</Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      );
+                    })}
+                   </div>
                 </div>
               )}
 

@@ -190,33 +190,28 @@ export default function PagamentoPage() {
     try {
       /* ---------- PIX ---------- */
       if (metodoPagamento === "PIX") {
-        let data;
-        try {
-          const res = await fetch(
-            `${API_URL}/pagamento/${pagamento._id}/pix`
-          );
-          if (!res.ok) {
-            const txt = await res.text().catch(() => null);
-            console.error('[DEBUG] /pix response not ok', res.status, txt);
-            throw new Error('Falha ao obter dados PIX');
+        // Se já temos pixData, apenas iniciar polling/aguardar confirmação
+        if (!pixData) {
+          try {
+            const res = await fetch(`${API_URL}/pagamento/${pagamento._id}/pix`);
+            if (!res.ok) {
+              const txt = await res.text().catch(() => null);
+              console.error('[DEBUG] /pix response not ok', res.status, txt);
+              throw new Error('Falha ao obter dados PIX');
+            }
+            const data = await res.json();
+            console.log('[DEBUG] /pix response json:', data);
+            setPixData({ qrCodeBase64: data.qrCodeBase64, copiaECola: data.copiaECola });
+          } catch (pixErr) {
+            console.error('Erro ao obter PIX:', pixErr);
+            setCardError('Erro ao gerar PIX. Tente novamente.');
+            setProcessando(false);
+            return;
           }
-
-          data = await res.json();
-          console.log('[DEBUG] /pix response json:', data);
-
-          setPixData({
-            qrCodeBase64: data.qrCodeBase64,
-            copiaECola: data.copiaECola,
-          });
-          // encerra o estado de processamento imediato para mostrar o QR
-          setProcessando(false);
-          setAguardandoConfirmacao(true);
-        } catch (pixErr) {
-          console.error('Erro ao obter PIX:', pixErr);
-          setCardError('Erro ao gerar PIX. Tente novamente.');
-          setProcessando(false);
-          return;
         }
+        // Mostrar QR e aguardar webhook/polling
+        setAguardandoConfirmacao(true);
+        // não desabilitar processando aqui — o overlay ficará por causa de aguardandoConfirmacao
       }
 
       /* ---------- CARTÃO ---------- */
@@ -347,7 +342,15 @@ export default function PagamentoPage() {
           return;
         }
 
-        // Aguarda confirmação via webhook (mantém overlay)
+        // Se o MP respondeu com status aprovado diretamente, atualizar estado local imediatamente
+        if (data.status === 'approved') {
+          setPagamento(p => ({ ...(p as any), status: 'Aprovado' }));
+          setAguardandoConfirmacao(false);
+          setProcessando(false);
+          return;
+        }
+
+        // Caso contrário, aguardar confirmação via webhook/polling
         setAguardandoConfirmacao(true);
       }
     } catch (err) {
