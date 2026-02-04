@@ -60,6 +60,9 @@ export default function PagamentoPage() {
 
   const [aguardandoConfirmacao, setAguardandoConfirmacao] = useState(false);
 
+  // Apenas para o carregamento do PIX (não usa o overlay global)
+  const [pixLoading, setPixLoading] = useState(false);
+
   // Estado para feedback de cópia do PIX
   const [copiedPix, setCopiedPix] = useState(false);
 
@@ -104,6 +107,32 @@ export default function PagamentoPage() {
       } catch (e) {
         console.error('Fallback de cópia falhou:', e);
       }
+    }
+  };
+
+  // Função reutilizável para buscar dados PIX sem ativar o overlay global
+  const fetchPixData = async () => {
+    if (!pagamento?._id) return null;
+    setPixLoading(true);
+    setCardError(null);
+    try {
+      const res = await fetch(`${API_URL}/pagamento/${pagamento._id}/pix`);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => null);
+        console.error('[DEBUG] /pix response not ok', res.status, txt);
+        throw new Error('Falha ao obter dados PIX');
+      }
+      const data = await res.json();
+      setPixData({ qrCodeBase64: data.qrCodeBase64, copiaECola: data.copiaECola });
+      // iniciar o estado de aguardando confirmação para iniciar polling
+      setAguardandoConfirmacao(true);
+      return data;
+    } catch (err) {
+      console.error('Erro ao obter PIX (fetchPixData):', err);
+      setCardError('Erro ao gerar PIX. Tente novamente.');
+      return null;
+    } finally {
+      setPixLoading(false);
     }
   };
 
@@ -184,38 +213,25 @@ export default function PagamentoPage() {
   const handlePagar = async () => {
     if (!pagamento) return;
 
-    setProcessando(true);
+    // Reset de erros
     setCardError(null);
 
     try {
       /* ---------- PIX ---------- */
       if (metodoPagamento === "PIX") {
-        // Se já temos pixData, apenas iniciar polling/aguardar confirmação
+        // Se já temos pixData, apenas garantir polling; caso contrário, buscar agora
         if (!pixData) {
-          try {
-            const res = await fetch(`${API_URL}/pagamento/${pagamento._id}/pix`);
-            if (!res.ok) {
-              const txt = await res.text().catch(() => null);
-              console.error('[DEBUG] /pix response not ok', res.status, txt);
-              throw new Error('Falha ao obter dados PIX');
-            }
-            const data = await res.json();
-            console.log('[DEBUG] /pix response json:', data);
-            setPixData({ qrCodeBase64: data.qrCodeBase64, copiaECola: data.copiaECola });
-          } catch (pixErr) {
-            console.error('Erro ao obter PIX:', pixErr);
-            setCardError('Erro ao gerar PIX. Tente novamente.');
-            setProcessando(false);
-            return;
-          }
+          const got = await fetchPixData();
+          if (!got) return; // erro já tratado em fetchPixData
+        } else {
+          setAguardandoConfirmacao(true);
         }
-        // Mostrar QR e aguardar webhook/polling
-        setAguardandoConfirmacao(true);
-        // não desabilitar processando aqui — o overlay ficará por causa de aguardandoConfirmacao
+        return; // fluxo PIX finalizado aqui (polling cuidará da confirmação)
       }
 
       /* ---------- CARTÃO ---------- */
       if (metodoPagamento === "CREDIT_CARD") {
+        setProcessando(true);
         if (!mpInstance.current) {
           throw new Error("Mercado Pago não inicializado");
         }
@@ -282,7 +298,9 @@ export default function PagamentoPage() {
           identificationNumber: cardForm.docNumber,
         });
 
-        if (!tokenResponse?.id) {
+        // Aceitar diferentes formatos de resposta do SDK e proteger contra undefined
+        const tokenId = tokenResponse?.id || tokenResponse?.card?.id || tokenResponse?.card_id || tokenResponse?.token;
+        if (!tokenId) {
           setCardError('Erro ao gerar token do cartão');
           setProcessando(false);
           return;
@@ -291,23 +309,32 @@ export default function PagamentoPage() {
         /* ===== IDENTIFICAR BANDEIRA (VISA / MASTERCARD) ===== */
         const bin = cardForm.cardNumber.replace(/\s/g, "").substring(0, 6);
 
-        const paymentMethods = await mpInstance.current.getPaymentMethods({ bin });
-        const paymentMethodId = paymentMethods?.results?.[0]?.id;
+        // Identificar a bandeira com proteção contra respostas indefinidas do SDK
+        let paymentMethodId: string | undefined;
+        try {
+          const paymentMethods = await mpInstance.current.getPaymentMethods?.({ bin });
+          if (paymentMethods && Array.isArray(paymentMethods.results) && paymentMethods.results.length > 0) {
+            paymentMethodId = paymentMethods.results[0]?.id;
+          }
+        } catch (pmErr) {
+          console.warn('Falha ao identificar paymentMethods:', pmErr);
+          paymentMethodId = undefined;
+        }
 
         if (!paymentMethodId) {
-          throw new Error("Bandeira do cartão não identificada");
+          setCardError('Bandeira do cartão não identificada');
+          setProcessando(false);
+          return;
         }
 
         let issuerId: string | undefined;
-
         try {
-          const issuers = await mpInstance.current.getIssuers({
-            paymentMethodId,
-            bin,
-        });
-
-          issuerId = issuers?.results?.[0]?.id;
-        } catch {
+          const issuers = await mpInstance.current.getIssuers?.({ paymentMethodId, bin });
+          if (issuers && Array.isArray(issuers.results) && issuers.results.length > 0) {
+            issuerId = issuers.results[0]?.id;
+          }
+        } catch (issErr) {
+          console.warn('Falha ao obter issuers:', issErr);
           issuerId = undefined;
         }
 
@@ -317,7 +344,7 @@ export default function PagamentoPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              token: tokenResponse.id,
+              token: tokenId,
               installments: parcelas,
               cpf: cardForm.docNumber,
               paymentMethodId,

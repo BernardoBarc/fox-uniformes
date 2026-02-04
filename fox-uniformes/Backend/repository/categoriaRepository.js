@@ -1,4 +1,5 @@
 import Categoria from '../models/categoria.js';
+import Produto from '../models/produto.js';
 
 const getAllCategorias = async () => {
     try {
@@ -44,7 +45,12 @@ const updateCategoria = async (id, { name, descricao, ativo }) => {
 
 const deleteCategoria = async (id) => {
     try {
-        return await Categoria.findByIdAndDelete(id);
+        // Deleta todos os produtos vinculados a esta categoria primeiro
+        const deleteResult = await Produto.deleteMany({ categoria: id });
+        const deletedCount = deleteResult?.deletedCount || 0;
+        // Em seguida, deleta a própria categoria
+        const deletedCategoria = await Categoria.findByIdAndDelete(id);
+        return { deletedCategoria, deletedCount };
     } catch (error) {
         throw error;
     }

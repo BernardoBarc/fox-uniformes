@@ -28,6 +28,10 @@ const deletePedido = async (id) => {
     return await pedidoRepository.deletePedido(id);
 };
 
+const calcularEAtualizarEntrega = async (pedidoId) => {
+    return await pedidoRepository.calcularEAtualizarEntrega(pedidoId);
+};
+
 const pedidoService = {
     getPedido,
     getAllPedidos,
@@ -35,7 +39,8 @@ const pedidoService = {
     getPedidosByCliente,
     savePedido,
     updatePedido,
-    deletePedido
+    deletePedido,
+    calcularEAtualizarEntrega
 };
 
 export default pedidoService;

@@ -70,7 +70,7 @@ const pedidoSchema = new mongoose.Schema({
     },
     entrega: {
         type: String,
-        required: true
+        required: false, // torna opcional; será calculado após aceite do pedido
     },
     photo: {
         type: String,

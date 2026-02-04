@@ -55,10 +55,24 @@ router.get('/trajeto/:id', async (req, res) => {
     }
 });
 
-router.get('/trajetos', async (req, res) => {
+router.get('/trajetos', authMiddleware, async (req, res) => {
     try {
-        const trajetos = await trajetoService.getAllTrajetos();
-        res.json(trajetos);
+        if (!req.user) return res.status(401).json({ message: 'Não autenticado' });
+
+        // Admin vê todos; vendedor vê apenas seus trajetos
+        if (req.user.role === 'admin') {
+            const trajetos = await trajetoService.getAllTrajetos();
+            return res.json(trajetos);
+        }
+
+        if (req.user.role === 'vendedor') {
+            const vendedorId = req.user._id || req.user.id;
+            const trajetos = await trajetoService.getTrajetosByVendedor(String(vendedorId));
+            return res.json(trajetos);
+        }
+
+        // outros papéis não podem visualizar trajetos
+        return res.status(403).json({ message: 'Acesso negado' });
     } catch (error) {
         console.error('Error fetching trajetos:', error);
         res.status(500).json({ message: 'Internal server error' });

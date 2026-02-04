@@ -80,8 +80,11 @@ router.put('/categorias/:id', async (req, res) => {
 // Deletar categoria
 router.delete('/categorias/:id', async (req, res) => {
     try {
-        await categoriaService.deleteCategoria(req.params.id);
-        res.status(204).send();
+        const result = await categoriaService.deleteCategoria(req.params.id);
+        const deletedCount = result?.deletedCount || result?.deletedCount === 0 ? result.deletedCount : (result?.deletedCount ?? 0);
+        // Mensagem profissional logada no servidor
+        console.log(`Categoria deletada: ${req.params.id}. ${deletedCount} produto(s) vinculados removidos em conjunto.`);
+        res.status(200).json({ message: `Categoria deletada com sucesso. ${deletedCount} produto(s) vinculados também foram removidos.` });
     } catch (error) {
         console.error('Erro ao deletar categoria:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });

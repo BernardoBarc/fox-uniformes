@@ -132,7 +132,7 @@ export default function AdminDashboardPage() {
 
   // Trajetos - novo estado para criação rápida
   const [showNovoTrajeto, setShowNovoTrajeto] = useState(false);
-  const [novoTrajeto, setNovoTrajeto] = useState({ nomeCliente: "", cidade: "", estado: "", rua: "", bairro: "", cep: "", dataVisita: "" });
+  const [novoTrajeto, setNovoTrajeto] = useState({ nomeCliente: "", cidade: "", estado: "", rua: "", bairro: "", cep: "", dataVisita: "", vendedorId: "" });
   const [editTrajetoId, setEditTrajetoId] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
@@ -219,6 +219,12 @@ export default function AdminDashboardPage() {
   const [editClienteId, setEditClienteId] = useState<string | null>(null);
 
   const [erroValidacaoCPF, setErroValidacaoCPF] = useState<string | null>(null);
+  // Estado para visualizar detalhes de um pedido (modal)
+  // usamos `any` aqui para evitar conflitos com tipos do frontend; pode ser tipado melhor mais tarde
+  const [viewingPedido, setViewingPedido] = useState<any | null>(null);
+  // loading para ação de aceitar pedido
+  const [acceptLoading, setAcceptLoading] = useState(false);
+  const handleCloseViewingPedido = () => setViewingPedido(null);
 
   const [editProdutoId, setEditProdutoId] = useState<string | null>(null);
   const [editProdutoData, setEditProdutoData] = useState<Produto | null>(null);
@@ -570,8 +576,19 @@ export default function AdminDashboardPage() {
     };
 
     try {
-      // validação e conversão da data no formato brasileiro
-      const payload: any = { ...novoTrajeto, vendedorId: userData?.id };
+      const payload: any = { ...novoTrajeto };
+      // Se admin estiver criando, obrigar seleção de vendedor responsável
+      if (userData?.role === 'admin') {
+        if (!novoTrajeto.vendedorId) {
+          setMessage({ type: 'error', text: 'Selecione o vendedor responsável pelo trajeto.' });
+          setLoading(false);
+          return;
+        }
+        payload.vendedorId = novoTrajeto.vendedorId;
+      } else {
+        payload.vendedorId = userData?.id;
+      }
+
       if (novoTrajeto.dataVisita) {
         const iso = parseDateToISO(novoTrajeto.dataVisita);
         if (!iso) {
@@ -605,7 +622,7 @@ export default function AdminDashboardPage() {
       }
 
       if (response && response.ok) {
-        setNovoTrajeto({ nomeCliente: '', cidade: '', estado: '', rua: '', bairro: '', cep: '', dataVisita: '' });
+        setNovoTrajeto({ nomeCliente: '', cidade: '', estado: '', rua: '', bairro: '', cep: '', dataVisita: '', vendedorId: '' });
         setShowNovoTrajeto(false);
         fetchTrajetos();
       }
@@ -621,6 +638,7 @@ export default function AdminDashboardPage() {
       bairro: t.bairro || '',
       cep: t.cep || '',
       dataVisita: t.dataVisita ? new Date(t.dataVisita).toISOString().split('T')[0] : '',
+      vendedorId: (t as any).vendedorId?._id || (t as any).vendedorId || '',
     });
     setEditTrajetoId(t._id);
     setShowNovoTrajeto(true);
@@ -839,21 +857,21 @@ export default function AdminDashboardPage() {
                             <div className="text-sm kv-muted">R$ {p.preco?.toFixed(2)}</div>
                             {p.status === 'Pendente' ? (
                               <div className="flex items-center gap-2">
-                                <Button variant="gold" onClick={() => { if (confirm('Deseja aceitar este pedido?')) handleUpdatePedidoStatus(p._id, 'Em Progresso'); }}>Aceitar</Button>
+                                <Button variant="gold" onClick={() => setViewingPedido(p)}>Visualizar</Button>
                                 <Button variant="ghost" onClick={() => { if (confirm('Deseja recusar e cancelar este pedido?')) handleUpdatePedidoStatus(p._id, 'Cancelado'); }}>Recusar</Button>
                               </div>
                             ) : (
-                              <select className="input-gold text-sm text-app bg-card appearance-none px-2 py-1 rounded" value={p.status} onChange={(e) => { const novo = e.target.value; if (novo === 'Cancelado' && !confirm('Confirma cancelar este pedido?')) return; handleUpdatePedidoStatus(p._id, novo); }}>
-                                <option value="Aguardando Pagamento">Aguardando Pagamento</option>
-                                <option value="Pendente">Pendente</option>
-                                <option value="Em Progresso">Em Progresso</option>
-                                <option value="Em Trânsito">Em Trânsito</option>
-                                <option value="Concluído">Concluído</option>
-                                <option value="Cancelado">Cancelado</option>
-                              </select>
-                            )}
-                          </div>
-                        </div>
+                                 <select className="input-gold text-sm text-app bg-card appearance-none px-2 py-1 rounded" value={p.status} onChange={(e) => { const novo = e.target.value; if (novo === 'Cancelado' && !confirm('Confirma cancelar este pedido?')) return; handleUpdatePedidoStatus(p._id, novo); }}>
+                                   <option value="Aguardando Pagamento">Aguardando Pagamento</option>
+                                   <option value="Pendente">Pendente</option>
+                                   <option value="Em Progresso">Em Progresso</option>
+                                   <option value="Em Trânsito">Em Trânsito</option>
+                                   <option value="Concluído">Concluído</option>
+                                   <option value="Cancelado">Cancelado</option>
+                                 </select>
+                               )}
+                           </div>
+                         </div>
                       ))}
                     </div>
                   )}
@@ -957,10 +975,25 @@ export default function AdminDashboardPage() {
                         }} />
                         {cepLoading && <div className="text-sm kv-muted mt-1">Buscando CEP...</div>}
                         {cepError && <div className="text-sm text-red-400 mt-1">{cepError}</div>}
-                        <input className="input-gold" type="date" placeholder="Data Visita" value={novoTrajeto.dataVisita} onChange={e => setNovoTrajeto(s => ({ ...s, dataVisita: e.target.value }))} />
+                        {/* Para admins: selecionar vendedor responsável pelo trajeto */}
+                        {userData?.role === 'admin' && (
+                          <div>
+                            <label className="text-sm text-white mb-1 block">Vendedor responsável</label>
+                            <select className="input-gold" value={novoTrajeto.vendedorId} onChange={e => setNovoTrajeto(s => ({ ...s, vendedorId: e.target.value }))}>
+                              <option value="">Selecione vendedor</option>
+                              {vendedores.map(v => <option key={v._id} value={v._id}>{v.name} ({v.login})</option>)}
+                            </select>
+                            <div className="text-xs kv-muted mt-1">Selecione o vendedor responsável por esta rota</div>
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-sm text-white mb-1 block">Data Visita</label>
+                          <input className="input-gold" type="date" value={novoTrajeto.dataVisita} onChange={e => setNovoTrajeto(s => ({ ...s, dataVisita: e.target.value }))} />
+                          <div className="text-xs kv-muted mt-1">Informe a data da visita (DD/MM/AAAA)</div>
+                        </div>
                         <div className="col-span-full md:col-span-3 flex gap-2">
                           <Button variant="gold" type="submit">{editTrajetoId ? 'Salvar' : 'Criar Trajeto'}</Button>
-                          <Button variant="ghost" onClick={() => { setShowNovoTrajeto(false); setEditTrajetoId(null); setNovoTrajeto({ nomeCliente: '', cidade: '', estado: '', rua: '', bairro: '', cep: '', dataVisita: '' }); }}>Cancelar</Button>
+                          <Button variant="ghost" onClick={() => { setShowNovoTrajeto(false); setEditTrajetoId(null); setNovoTrajeto({ nomeCliente: '', cidade: '', estado: '', rua: '', bairro: '', cep: '', dataVisita: '', vendedorId: '' }); }}>Cancelar</Button>
                         </div>
                       </form>
                     </div>
@@ -1033,14 +1066,17 @@ export default function AdminDashboardPage() {
               {/* Formulários de criação rápida (novoVendedor, novoProduto, novoCliente, novoCupom, novaCategoria) */}
 
               {activeTab === 'novoVendedor' && (
-                <div className="bg-card p-6 rounded">
-                  <h3 className="text-xl font-semibold kv-accent mb-4">{editVendedorId ? 'Editar Vendedor' : 'Criar Vendedor'}</h3>
-                  <form onSubmit={handleCriarVendedor} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-card p-4 rounded mb-4">
+                  <form onSubmit={handleCriarVendedor} className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input className="input-gold" placeholder="Nome" value={novoVendedor.name} onChange={e => setNovoVendedor(s => ({ ...s, name: e.target.value }))} />
                     <input className="input-gold" placeholder="Login" value={novoVendedor.login} onChange={e => setNovoVendedor(s => ({ ...s, login: e.target.value }))} />
                     <input className="input-gold" placeholder="Email" value={novoVendedor.email} onChange={e => setNovoVendedor(s => ({ ...s, email: e.target.value }))} />
                     <input className="input-gold" placeholder="Telefone" value={novoVendedor.telefone} onChange={e => setNovoVendedor(s => ({ ...s, telefone: e.target.value }))} />
-                    <input className="input-gold" type="date" placeholder="Data de Nascimento" value={novoVendedor.dataNascimento} onChange={e => setNovoVendedor(s => ({ ...s, dataNascimento: e.target.value }))} />
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Data de Nascimento</label>
+                      <input className="input-gold" type="date" value={novoVendedor.dataNascimento} onChange={e => setNovoVendedor(s => ({ ...s, dataNascimento: e.target.value }))} />
+                      <div className="text-xs kv-muted mt-1">Informe a data de nascimento do vendedor (DD/MM/AAAA)</div>
+                    </div>
                     <input className="input-gold" placeholder="Senha (deixe em branco para manter)" type="password" value={novoVendedor.password} onChange={e => setNovoVendedor(s => ({ ...s, password: e.target.value }))} />
                     <input className="input-gold" placeholder="Confirmar Senha" type="password" value={novoVendedor.confirmPassword} onChange={e => setNovoVendedor(s => ({ ...s, confirmPassword: e.target.value }))} />
                     <div className="col-span-full flex gap-2"><Button variant="gold" type="submit">{editVendedorId ? 'Salvar' : 'Criar'}</Button><Button variant="ghost" onClick={() => { setActiveTab('vendedores'); setEditVendedorId(null); setNovoVendedor({ name: '', login: '', email: '', telefone: '', endereco: '', dataNascimento: '', password: '', confirmPassword: '' }); }}>Cancelar</Button></div>
@@ -1140,6 +1176,89 @@ export default function AdminDashboardPage() {
           </main>
         </div>
       </div>
+
+      {/* Modal de visualização de pedido */}
+      {viewingPedido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card p-6 rounded w-full max-w-2xl">
+            <div className="flex items-start justify-between">
+              <h3 className="text-xl font-semibold">Detalhes do Pedido</h3>
+              <button className="text-sm text-white/60" onClick={handleCloseViewingPedido}>Fechar</button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm">
+              <div><strong>Cliente:</strong> {viewingPedido.nomeCliente}</div>
+              <div><strong>Preço total:</strong> R$ {viewingPedido.preco?.toFixed(2)}</div>
+              <div><strong>Status:</strong> {viewingPedido.status}</div>
+              <div>
+                <strong>Itens ({(viewingPedido.items?.length as number) || 0}):</strong>
+                <div className="mt-2 space-y-2">
+                  {viewingPedido.items?.map((it: any, idx: number) => (
+                    <div key={idx} className="p-2 border rounded">
+                      <div className="font-medium">{(it as any).produtoId?.name || 'Produto'}</div>
+                      <div className="text-xs kv-muted">Tamanho: {it.tamanho} • Quantidade: {it.quantidade} • Preço unit.: R$ {(it.precoUnitario || 0).toFixed(2)}</div>
+                      {it.observacoes && <div className="mt-1">Observações: {it.observacoes}</div>}
+                      {it.photo && <img src={getImageUrl(it.photo) || it.photo} alt="anexo" className="w-32 h-32 object-cover mt-2 rounded" />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {viewingPedido.observacoes && (<div><strong>Observações gerais:</strong><div className="mt-1">{viewingPedido.observacoes}</div></div>)}
+              {viewingPedido.photo && (<div><strong>Anexo:</strong><div className="mt-2"><img src={getImageUrl(viewingPedido.photo) || viewingPedido.photo} alt="anexo" className="w-48 h-48 object-cover rounded" /></div></div>)}
+            </div>
+            <div className="mt-4 flex gap-2 justify-end">
+              <Button variant="gold" disabled={acceptLoading} onClick={async () => {
+                if (!confirm('Deseja aceitar este pedido?')) return;
+                try {
+                  setAcceptLoading(true);
+                  const response = await fetch(`${API_URL}/pedidos/${viewingPedido._id}`, {
+                    method: 'PUT',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ status: 'Em Progresso' })
+                  });
+                  const data = await response.json().catch(() => ({}));
+                  if (response.ok) {
+                    // atualização retornou pedido com entrega calculada (seok)
+                    setViewingPedido(data);
+                    setMessage({ type: 'success', text: 'Pedido aceito. Prazo de entrega calculado.' });
+                    // atualizar lista
+                    fetchPedidos();
+                  } else {
+                    setMessage({ type: 'error', text: data.error || 'Erro ao aceitar pedido' });
+                  }
+                } catch (err) {
+                  console.error('Erro ao aceitar pedido', err);
+                  setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
+                } finally {
+                  setAcceptLoading(false);
+                }
+              }}>{acceptLoading ? 'Processando...' : 'Aceitar'}</Button>
+              <Button variant="ghost" onClick={async () => {
+                if (!confirm('Deseja recusar e cancelar este pedido?')) return;
+                try {
+                  const response = await fetch(`${API_URL}/pedidos/${viewingPedido._id}`, {
+                    method: 'PUT',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ status: 'Cancelado' })
+                  });
+                  const data = await response.json().catch(() => ({}));
+                  if (response.ok) {
+                    setMessage({ type: 'success', text: 'Pedido cancelado.' });
+                    fetchPedidos();
+                  } else {
+                    setMessage({ type: 'error', text: data.error || 'Erro ao cancelar pedido' });
+                  }
+                } catch (err) {
+                  console.error('Erro ao cancelar pedido', err);
+                  setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
+                } finally {
+                  handleCloseViewingPedido();
+                }
+              }}>Recusar</Button>
+              <Button variant="ghost" onClick={handleCloseViewingPedido}>Fechar</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -206,8 +206,10 @@ const savePedido = async ({nomeCliente, clienteId, vendedorId, produtoId, tamanh
             precoOrig = precoOriginal || totalPreco;
         }
 
-        // Se entrega não foi informada, calcular automaticamente com base no total de peças (soma)
-        const entregaFinal = entrega && entrega !== '' ? entrega : estimateEntregaFromPieces(totalPieces || 1);
+        // Antes: calculava entrega mesmo para pedidos pendentes. Agora só calcular se já houver entrega informada
+        // const entregaFinal = entrega && entrega !== '' ? entrega : estimateEntregaFromPieces(totalPieces || 1);
+        // Não calcular entrega aqui se o pedido for criado com status 'Pendente'
+        let entregaFinal = entrega && entrega !== '' ? entrega : undefined;
 
         const pedidoData = {
             nomeCliente,
@@ -235,6 +237,21 @@ const savePedido = async ({nomeCliente, clienteId, vendedorId, produtoId, tamanh
     }
 }
 
+// Calcula e seta a data de entrega baseada nos itens do pedido — usada quando admin aceita o pedido
+const calcularEAtualizarEntrega = async (pedidoId) => {
+    try {
+        const p = await pedido.findById(pedidoId);
+        if (!p) throw new Error('Pedido não encontrado');
+        const totalPieces = Array.isArray(p.items) && p.items.length > 0 ? p.items.reduce((acc, it) => acc + (Number(it.quantidade) || 0), 0) : (Number(p.quantidade) || 1);
+        const entregaEstim = estimateEntregaFromPieces(totalPieces || 1);
+        p.entrega = entregaEstim;
+        await p.save();
+        return p;
+    } catch (err) {
+        throw new Error(err);
+    }
+};
+
 const updatePedido = async (id, updateData) => {
     try {
         const updatedPedido = await pedido.findByIdAndUpdate(id, updateData, {new: true});
@@ -260,7 +277,8 @@ const pedidoRepository = {
     savePedido,
     updatePedido,
     deletePedido,
-    estimateEntregaFromPieces
+    estimateEntregaFromPieces,
+    calcularEAtualizarEntrega
 };
 
 export default pedidoRepository;

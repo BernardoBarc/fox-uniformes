@@ -90,6 +90,20 @@ router.put("/pedidos/:id", upload.single("photo"), async (req, res) => {
         if (!updatedPedido) {
             return res.status(404).json({ error: "Pedido não encontrado" });
         }
+
+        // Se status foi atualizado para 'Em Progresso', calcular e salvar entrega
+        if (updateData.status === 'Em Progresso') {
+            try {
+                const p = await pedidoService.calcularEAtualizarEntrega(req.params.id);
+                // retornar pedido atualizado com entrega
+                return res.json(p);
+            } catch (err) {
+                console.error('Erro ao calcular entrega:', err);
+                // mesmo se falhar no cálculo, retornar o pedido atualizado sem bloquear
+                return res.json(updatedPedido);
+            }
+        }
+
         res.json(updatedPedido);
     } catch (error) {
         res.status(500).json({ error: error.message });

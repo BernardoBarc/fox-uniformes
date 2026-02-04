@@ -8,7 +8,7 @@ export default function Header({ user, onLogout }: { user?: { login?: string; na
   const router = useRouter();
   const pathname = usePathname();
   // Esconder Header na página de acompanhamento, na root (login) e em Esqueci-senha
-  if (pathname && (pathname === '/' || pathname.startsWith('/acompanhar') || pathname === '/Esqueci-senha')) return null;
+  if (pathname && (pathname === '/' || pathname.startsWith('/acompanhar') || pathname.startsWith('/Esqueci-senha'))) return null;
   const [fetchedUser, setFetchedUser] = useState<{ login?: string; name?: string } | null>(null);
 
   useEffect(() => {
