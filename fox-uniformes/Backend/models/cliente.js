@@ -22,23 +22,24 @@ const clienteSchema = new mongoose.Schema({
     },
     cidade: {
         type: String,
-        required: true,
+        // tornar opcional para permitir criação rápida pelo painel
+        required: false,
     },
     estado: {
         type: String,
-        required: true,
+        required: false,
     },
     rua: {
         type: String,
-        required: true,
+        required: false,
     },
     numero: {
         type: String,
-        required: true,
+        required: false,
     },
     bairro: {
         type: String,
-        required: true,
+        required: false,
     },
     cep: {
         type: String,
@@ -51,7 +52,8 @@ const clienteSchema = new mongoose.Schema({
     vendedorId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        // vendedor opcional: se não informado pelo front, backend não deve bloquear a criação
+        required: false
     },
     createdAt: {
         type: Date,

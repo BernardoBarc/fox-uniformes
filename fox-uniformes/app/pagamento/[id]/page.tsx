@@ -382,8 +382,31 @@ export default function PagamentoPage() {
       }
     } catch (err) {
       console.error(err);
-      // normaliza erro para evitar problemas de tipagem no TypeScript
-      setCardError((err as any)?.message || 'Erro ao processar pagamento.');
+
+      // Primeiro tentar checar o status do pagamento no backend — em muitos casos o erro ocorreu
+      // depois que o backend já processou a cobrança, então a verificação evitará mostrar
+      // mensagens internas (ex.: "Cannot read properties of undefined (reading 'id')") ao usuário.
+      try {
+        if (pagamento?._id) {
+          const statusRes = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
+          if (statusRes.ok) {
+            const statusData = await statusRes.json().catch(() => null);
+            if (statusData && statusData.status === 'Aprovado') {
+              // Atualiza UI como pago e não mostra erro técnico
+              setPagamento(statusData);
+              setAguardandoConfirmacao(false);
+              setProcessando(false);
+              setCardError(null);
+              return;
+            }
+          }
+        }
+      } catch (statusErr) {
+        console.warn('Erro ao consultar status após falha no pagamento:', statusErr);
+      }
+
+      // Se não foi aprovado, mostra mensagem amigável em vez de mensagem técnica
+      setCardError('Erro ao processar pagamento. Verifique os dados e tente novamente.');
       setProcessando(false);
     }
   };
@@ -421,6 +444,71 @@ export default function PagamentoPage() {
 
     return () => clearInterval(interval);
   }, [aguardandoConfirmacao, pagamento?._id]);
+
+  /* ================= TENTAR BUSCAR PIX AUTOMATICAMENTE (executa enquanto a página estiver montada) ================= */
+  useEffect(() => {
+    if (!pagamento?._id) return;
+
+    // Só tenta quando método PIX for a seleção atual (padrão) — evita chamadas desnecessárias
+    if (metodoPagamento !== 'PIX') return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 8;
+    const delayMs = 1500;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tryFetch = async () => {
+      if (cancelled) return;
+      if (pixData) return; // já obtido
+
+      try {
+        const res = await fetch(`${API_URL}/pagamento/${pagamento._id}/pix`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && data && (data.qrCodeBase64 || data.copiaECola)) {
+            setPixData({ qrCodeBase64: data.qrCodeBase64, copiaECola: data.copiaECola });
+            setAguardandoConfirmacao(true);
+            return;
+          }
+        }
+      } catch (e) {
+        // falha silenciosa — iremos tentar novamente
+        console.debug('Tentativa de fetch PIX falhou (silencioso):', e);
+      }
+
+      attempts += 1;
+      if (attempts < maxAttempts && !cancelled) {
+        timer = setTimeout(tryFetch, delayMs);
+      }
+    };
+
+    // iniciamos imediatamente
+    tryFetch();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [pagamento?._id, metodoPagamento]);
+
+  /* ================= OCULTAR HEADER GLOBAL (somente nesta página) ================= */
+  useEffect(() => {
+    // Executa apenas no cliente
+    try {
+      const headerEl = document.querySelector('header');
+      if (!headerEl) return;
+      const previousDisplay = (headerEl as HTMLElement).style.display || '';
+      (headerEl as HTMLElement).style.display = 'none';
+      return () => {
+        // restora quando sair da página
+        (headerEl as HTMLElement).style.display = previousDisplay;
+      };
+    } catch (e) {
+      // se qualquer erro, não bloqueia a página
+      console.warn('Não foi possível ocultar o header:', e);
+    }
+  }, []);
 
   /* ================= TELAS ================= */
   if (loading)

@@ -123,6 +123,8 @@ export default function DashboardPage() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [loading, setLoading] = useState(false);
+  // Guard para evitar submissões duplicadas rápidas (double-click)
+  const isSubmittingRef = useRef(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Estados para dados
@@ -589,19 +591,27 @@ export default function DashboardPage() {
 
   const handleFinalizarVenda = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    // Impede reentrância caso já estejamos processando uma submissão
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+
+    // Validações iniciais
     if (carrinho.length === 0) {
       setMessage({ type: "error", text: "Adicione pelo menos um item ao carrinho!" });
+      isSubmittingRef.current = false;
       return;
     }
 
     if (!novoPedido.nomeCliente || !novoPedido.cpfCliente) {
       setMessage({ type: "error", text: "Preencha o CPF e nome do cliente!" });
+      isSubmittingRef.current = false;
       return;
     }
 
     if (!clienteSelecionado) {
       setMessage({ type: "error", text: "Cliente não encontrado! Verifique o CPF ou cadastre o cliente primeiro." });
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -709,6 +719,7 @@ export default function DashboardPage() {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Erro ao finalizar venda" });
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -906,8 +917,12 @@ export default function DashboardPage() {
                       <p className="text-4xl font-bold text-success">{pedidos.filter(p => p.status === 'Concluído').length}</p>
                     </div>
                     <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent-2)' }}>
-                      <h3 className="text-lg kv-muted">Faturamento</h3>
-                      <p className="text-3xl font-bold kv-accent">R$ {pedidos.filter(p => p.status === 'Concluído').reduce((acc, p) => acc + (p.preco || 0), 0).toFixed(2)}</p>
+                      <h3 className="text-lg kv-muted">{userData?.role === 'vendedor' ? 'Meu Faturamento' : 'Faturamento'}</h3>
+                      <p className="text-3xl font-bold kv-accent">R$ {(
+                        userData?.role === 'vendedor'
+                        ? pedidos.filter(p => p.status === 'Concluído' && (String((p as any).vendedorId?._id || (p as any).vendedorId) === String(userData.id))).reduce((acc, p) => acc + (p.preco || 0), 0)
+                        : pedidos.filter(p => p.status === 'Concluído').reduce((acc, p) => acc + (p.preco || 0), 0)
+                      ).toFixed(2)}</p>
                     </div>
                   </div>
                 </section>
@@ -1094,7 +1109,13 @@ export default function DashboardPage() {
 
                           <div className="mt-3 font-semibold">Total: R$ {totalCarrinho.toFixed(2)}</div>
                           <div className="mt-3 flex gap-2">
-                            <button className="btn btn-gold" onClick={handleFinalizarVenda}>Finalizar Venda</button>
+                            <button
+                              className={`btn btn-gold ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              onClick={handleFinalizarVenda}
+                              disabled={loading}
+                            >
+                              {loading ? 'Processando...' : 'Finalizar Venda'}
+                            </button>
                             <button className="btn btn-ghost" onClick={() => { setCarrinho([]); setCodigoCupom(''); setCupomAplicado(null); setMessage(null); }}>Cancelar</button>
                           </div>
                         </div>
@@ -1161,55 +1182,76 @@ export default function DashboardPage() {
                         <input className="input-gold" placeholder="CPF" value={novoCliente.cpf} onChange={e => setNovoCliente(s => ({ ...s, cpf: e.target.value }))} />
                         <input className="input-gold" placeholder="Email" value={novoCliente.email} onChange={e => setNovoCliente(s => ({ ...s, email: e.target.value }))} />
                         <input className="input-gold" placeholder="Telefone" value={novoCliente.telefone} onChange={e => setNovoCliente(s => ({ ...s, telefone: e.target.value }))} />
-                        <div className="col-span-full flex gap-2"><button className="btn btn-gold" type="submit">Criar Cliente</button><button type="button" className="btn btn-ghost" onClick={() => { setShowNovoCliente(false); setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' }); }}>Cancelar</button></div>
+
+                        {/* Campos de endereço solicitados */}
+                        <input className="input-gold" placeholder="Cidade" value={novoCliente.cidade} onChange={e => setNovoCliente(s => ({ ...s, cidade: e.target.value }))} />
+                        <input className="input-gold" placeholder="Estado" value={novoCliente.estado} onChange={e => setNovoCliente(s => ({ ...s, estado: e.target.value }))} />
+                        <input className="input-gold" placeholder="Rua" value={novoCliente.rua} onChange={e => setNovoCliente(s => ({ ...s, rua: e.target.value }))} />
+                        <input className="input-gold" placeholder="Número" value={novoCliente.numero} onChange={e => setNovoCliente(s => ({ ...s, numero: e.target.value }))} />
+                        <input className="input-gold" placeholder="Bairro" value={novoCliente.bairro} onChange={e => setNovoCliente(s => ({ ...s, bairro: e.target.value }))} />
+                        <input className="input-gold" placeholder="CEP" value={novoCliente.cep} onChange={e => setNovoCliente(s => ({ ...s, cep: e.target.value }))} />
+                        <input className="input-gold" placeholder="Complemento" value={novoCliente.complemento} onChange={e => setNovoCliente(s => ({ ...s, complemento: e.target.value }))} />
+
+                        <div className="col-span-full md:col-span-2 flex gap-2">
+                          <button className="btn btn-gold" type="submit">Criar Cliente</button>
+                          <button type="button" className="btn btn-ghost" onClick={() => setShowNovoCliente(false)}>Cancelar</button>
+                        </div>
                       </form>
                     </div>
                   )}
 
-                  {clientes.length === 0 ? (
-                    <div className="bg-card p-4 rounded">Nenhum cliente encontrado.</div>
-                  ) : (
-                    <div className="bg-card p-4 rounded space-y-2">
-                      {clientes.map(c => (
-                        <div key={c._id} className="flex items-center justify-between p-3 border-b border-white/6">
-                          <div>
-                            <div className="font-medium">{c.nome}</div>
-                            <div className="text-sm kv-muted">{c.email} • {c.telefone}</div>
+                  {/* Lista de clientes */}
+                  <div className="bg-card p-4 rounded">
+                    {clientes.length === 0 ? (
+                      <div className="text-sm kv-muted">Nenhum cliente encontrado.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {clientes.map(c => (
+                          <div key={c._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                            <div>
+                              <div className="font-medium">{c.nome}</div>
+                              <div className="text-sm kv-muted">{c.cidade} - {c.estado} • {c.telefone}</div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button className="btn btn-ghost" onClick={() => abrirEdicaoCliente(c)}>Editar</button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button className="btn btn-ghost" onClick={() => abrirEdicaoCliente(c)}>Editar</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Modal de edição */}
-                  {mostrarModalEdicao && clienteEditando && (
-                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-                      <div className="bg-card p-6 rounded w-full max-w-lg">
-                        <h4 className="text-lg font-semibold mb-4">Editar Cliente</h4>
-                        <form onSubmit={handleAtualizarCliente} className="grid grid-cols-1 gap-3">
-                          <input className="input-gold" placeholder="Nome" value={clienteEditando.nome} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, nome: e.target.value }) : prev)} />
-                          <input className="input-gold" placeholder="CPF" value={clienteEditando.cpf} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, cpf: e.target.value }) : prev)} />
-                          <input className="input-gold" placeholder="Email" value={clienteEditando.email} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, email: e.target.value }) : prev)} />
-                          <input className="input-gold" placeholder="Telefone" value={clienteEditando.telefone} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, telefone: e.target.value }) : prev)} />
-                          <div className="flex gap-2 mt-2">
-                            <button className="btn btn-gold" type="submit">Salvar</button>
-                            <button type="button" className="btn btn-ghost" onClick={() => { setMostrarModalEdicao(false); setClienteEditando(null); }}>Cancelar</button>
-                          </div>
-                        </form>
+                        ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </section>
               )}
+
+              {/* Modal de edição de cliente */}
+              {mostrarModalEdicao && clienteEditando && (
+                <div className="fixed inset-0 flex items-center justify-center z-50">
+                  <div className="absolute inset-0 bg-black/60" onClick={() => setMostrarModalEdicao(false)} />
+                  <div className="bg-card p-6 rounded z-10 w-full max-w-lg">
+                    <h3 className="text-lg font-semibold mb-4">Editar Cliente</h3>
+                    <form onSubmit={handleAtualizarCliente} className="grid grid-cols-1 gap-2">
+                      <input className="input-gold" value={clienteEditando.nome} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, nome: e.target.value }) : prev)} />
+                      <input className="input-gold" value={clienteEditando.cpf} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, cpf: e.target.value }) : prev)} />
+                      <input className="input-gold" value={clienteEditando.email} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, email: e.target.value }) : prev)} />
+                      <input className="input-gold" value={clienteEditando.telefone} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, telefone: e.target.value }) : prev)} />
+                      <div className="flex gap-2 mt-4">
+                        <button className="btn btn-gold" type="submit" disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setMostrarModalEdicao(false)}>Cancelar</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Ações finais / logout */}
+              <div className="flex justify-end gap-2 mt-6">
+                <button className="btn btn-ghost" onClick={handleLogout}>Sair</button>
+              </div>
 
              </main>
            </div>
          </div>
        </div>
      </div>
-   );
- }
-
+     );
+}

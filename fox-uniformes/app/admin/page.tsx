@@ -979,7 +979,7 @@ export default function AdminDashboardPage() {
                         {userData?.role === 'admin' && (
                           <div>
                             <label className="text-sm text-white mb-1 block">Vendedor responsável</label>
-                            <select className="input-gold" value={novoTrajeto.vendedorId} onChange={e => setNovoTrajeto(s => ({ ...s, vendedorId: e.target.value }))}>
+                            <select className="input-gold text-sm text-app bg-card appearance-none px-2 py-1 rounded" value={novoTrajeto.vendedorId} onChange={e => setNovoTrajeto(s => ({ ...s, vendedorId: e.target.value }))}>
                               <option value="">Selecione vendedor</option>
                               {vendedores.map(v => <option key={v._id} value={v._id}>{v.name} ({v.login})</option>)}
                             </select>
@@ -1075,7 +1075,7 @@ export default function AdminDashboardPage() {
                     <div>
                       <label className="text-sm text-white mb-1 block">Data de Nascimento</label>
                       <input className="input-gold" type="date" value={novoVendedor.dataNascimento} onChange={e => setNovoVendedor(s => ({ ...s, dataNascimento: e.target.value }))} />
-                      <div className="text-xs kv-muted mt-1">Informe a data de nascimento do vendedor (DD/MM/AAAA)</div>
+                      <div className="text-xs kv-muted mt-1"></div>
                     </div>
                     <input className="input-gold" placeholder="Senha (deixe em branco para manter)" type="password" value={novoVendedor.password} onChange={e => setNovoVendedor(s => ({ ...s, password: e.target.value }))} />
                     <input className="input-gold" placeholder="Confirmar Senha" type="password" value={novoVendedor.confirmPassword} onChange={e => setNovoVendedor(s => ({ ...s, confirmPassword: e.target.value }))} />
@@ -1123,6 +1123,16 @@ export default function AdminDashboardPage() {
                     <input className="input-gold" placeholder="CPF" value={novoCliente.cpf} onChange={e => setNovoCliente(s => ({ ...s, cpf: e.target.value }))} />
                     <input className="input-gold" placeholder="Email" value={novoCliente.email} onChange={e => setNovoCliente(s => ({ ...s, email: e.target.value }))} />
                     <input className="input-gold" placeholder="Telefone" value={novoCliente.telefone} onChange={e => setNovoCliente(s => ({ ...s, telefone: e.target.value }))} />
+
+                    {/* Campos de endereço solicitados */}
+                    <input className="input-gold" placeholder="Cidade" value={novoCliente.cidade} onChange={e => setNovoCliente(s => ({ ...s, cidade: e.target.value }))} />
+                    <input className="input-gold" placeholder="Estado" value={novoCliente.estado} onChange={e => setNovoCliente(s => ({ ...s, estado: e.target.value }))} />
+                    <input className="input-gold" placeholder="Rua" value={novoCliente.rua} onChange={e => setNovoCliente(s => ({ ...s, rua: e.target.value }))} />
+                    <input className="input-gold" placeholder="Número" value={novoCliente.numero} onChange={e => setNovoCliente(s => ({ ...s, numero: e.target.value }))} />
+                    <input className="input-gold" placeholder="Bairro" value={novoCliente.bairro} onChange={e => setNovoCliente(s => ({ ...s, bairro: e.target.value }))} />
+                    <input className="input-gold" placeholder="CEP" value={novoCliente.cep} onChange={e => setNovoCliente(s => ({ ...s, cep: e.target.value }))} />
+                    <input className="input-gold" placeholder="Complemento" value={novoCliente.complemento} onChange={e => setNovoCliente(s => ({ ...s, complemento: e.target.value }))} />
+
                     <div className="col-span-full flex gap-2"><Button variant="gold" type="submit">{editClienteId ? 'Salvar' : 'Criar'}</Button><Button variant="ghost" onClick={() => { setActiveTab('clientes'); setEditClienteId(null); setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' }); }}>Cancelar</Button></div>
                   </form>
                 </div>

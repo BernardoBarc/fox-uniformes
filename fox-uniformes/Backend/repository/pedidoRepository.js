@@ -88,53 +88,103 @@ const nextBusinessDayStart = (d, workStartHour = 9) => {
     date.setDate(date.getDate() + 1);
     // avança até dia útil
     while (!isBusinessDay(date)) date.setDate(date.getDate() + 1);
-    date.setHours(workStartHour, 0, 0, 0);
+    // workStartHour pode ser decimal (e.g. 8.5 == 08:30)
+    const hour = Math.floor(workStartHour);
+    const minutes = Math.round((workStartHour - hour) * 60);
+    date.setHours(hour, minutes, 0, 0);
     return date;
 };
 
 // Ajusta para o início do dia útil atual (workStartHour) se antes do horário
 const startOfBusinessDay = (d, workStartHour = 9) => {
     const date = new Date(d);
-    date.setHours(workStartHour, 0, 0, 0);
+    const hour = Math.floor(workStartHour);
+    const minutes = Math.round((workStartHour - hour) * 60);
+    date.setHours(hour, minutes, 0, 0);
     return date;
 };
 
-// Adiciona horas úteis a uma data, respeitando janela diária (workStartHour..workEndHour) e pulando finais de semana
-const addBusinessTime = (startDate, hoursToAdd, workStartHour = 9, workEndHour = 18) => {
+// Helper: retorna os turnos (intervalos) de trabalho para um dia específico
+const getWorkShiftsForDay = (date, morningStart = 8.5, morningEnd = 12, afternoonStart = 13.5, afternoonEnd = 18) => {
+    const day = new Date(date);
+    const ms = (h) => {
+        const hour = Math.floor(h);
+        const minutes = Math.round((h - hour) * 60);
+        const d = new Date(day);
+        d.setHours(hour, minutes, 0, 0);
+        return d;
+    };
+
+    return [
+        { start: ms(morningStart), end: ms(morningEnd) },
+        { start: ms(afternoonStart), end: ms(afternoonEnd) }
+    ];
+};
+
+// Adiciona horas úteis a uma data, respeitando janela diária com dois turnos e pulando finais de semana
+const addBusinessTime = (startDate, hoursToAdd, morningStart = 8.5, morningEnd = 12, afternoonStart = 13.5, afternoonEnd = 18) => {
     let remaining = Number(hoursToAdd) || 0;
     if (remaining <= 0) return new Date(startDate);
 
     let current = new Date(startDate);
 
-    // Se não for dia útil, avançar para próximo dia útil às workStartHour
-    if (!isBusinessDay(current)) {
-        current = nextBusinessDayStart(current, workStartHour);
-    }
+    // Avança para o próximo horário válido dentro dos turnos do dia
+    const advanceToNextValid = () => {
+        // se não for dia útil, ir para próximo dia útil e primeiro turno
+        if (!isBusinessDay(current)) {
+            current = nextBusinessDayStart(current, morningStart);
+            return;
+        }
 
-    // Se antes do horário de trabalho, ajustar para início do expediente
-    const todayStart = new Date(current);
-    todayStart.setHours(workStartHour, 0, 0, 0);
-    const todayEnd = new Date(current);
-    todayEnd.setHours(workEndHour, 0, 0, 0);
+        const shifts = getWorkShiftsForDay(current, morningStart, morningEnd, afternoonStart, afternoonEnd);
 
-    if (current < todayStart) {
-        current = new Date(todayStart);
-    } else if (current >= todayEnd) {
-        // inicia no próximo dia útil às 09:00
-        current = nextBusinessDayStart(current, workStartHour);
-    }
+        // se antes do primeiro turno
+        if (current < shifts[0].start) {
+            current = new Date(shifts[0].start);
+            return;
+        }
+
+        // se entre turnos, pular para inicio do segundo turno
+        if (current >= shifts[0].end && current < shifts[1].start) {
+            current = new Date(shifts[1].start);
+            return;
+        }
+
+        // se após o último turno, ir para próximo dia útil primeiro turno
+        if (current >= shifts[1].end) {
+            current = nextBusinessDayStart(current, morningStart);
+            return;
+        }
+
+        // se já está dentro de um turno, permanecer
+    };
+
+    // inicializar current para dentro de um turno válido
+    advanceToNextValid();
 
     while (remaining > 0) {
-        // garante limites do dia atual
-        const endOfToday = new Date(current);
-        endOfToday.setHours(workEndHour, 0, 0, 0);
+        if (!isBusinessDay(current)) {
+            current = nextBusinessDayStart(current, morningStart);
+            continue;
+        }
 
-        const availableMs = endOfToday - current;
+        const shifts = getWorkShiftsForDay(current, morningStart, morningEnd, afternoonStart, afternoonEnd);
+        let inShift = null;
+
+        if (current >= shifts[0].start && current < shifts[0].end) inShift = shifts[0];
+        else if (current >= shifts[1].start && current < shifts[1].end) inShift = shifts[1];
+        else {
+            // not in a shift -> advance to next valid
+            advanceToNextValid();
+            continue;
+        }
+
+        const availableMs = inShift.end - current;
         const availableHours = Math.max(0, availableMs / (1000 * 60 * 60));
 
         if (availableHours <= 0) {
-            // avança para próximo dia útil
-            current = nextBusinessDayStart(current, workStartHour);
+            // mover para próximo período
+            current = new Date(inShift.end.getTime());
             continue;
         }
 
@@ -142,13 +192,58 @@ const addBusinessTime = (startDate, hoursToAdd, workStartHour = 9, workEndHour =
         current = new Date(current.getTime() + take * 60 * 60 * 1000);
         remaining -= take;
 
-        // se ainda resta, avançar para próximo dia útil às workStartHour
+        // se ainda resta, precisamos avançar para o próximo turno/dia
         if (remaining > 0) {
-            current = nextBusinessDayStart(current, workStartHour);
+            // se estivermos no primeiro turno, pular para segundo turno do mesmo dia
+            if (inShift === shifts[0]) {
+                current = new Date(shifts[1].start.getTime());
+            } else {
+                // se já estava no segundo turno, avançar para próximo dia útil primeiro turno
+                current = nextBusinessDayStart(current, morningStart);
+            }
         }
     }
 
     return current;
+};
+
+// Ajusta uma data para o próximo horário dentro dos turnos de trabalho que seja >= da data fornecida.
+// Garante dia útil e que a hora esteja dentro de um dos dois turnos (matutino ou vespertino).
+const alignToBusinessWindowAtOrAfter = (date, morningStart = 8.5, morningEnd = 12, afternoonStart = 13.5, afternoonEnd = 18) => {
+    let d = new Date(date);
+
+    while (true) {
+        if (!isBusinessDay(d)) {
+            d = nextBusinessDayStart(d, morningStart);
+            continue;
+        }
+
+        const shifts = getWorkShiftsForDay(d, morningStart, morningEnd, afternoonStart, afternoonEnd);
+        const first = shifts[0];
+        const second = shifts[1];
+
+        if (d < first.start) {
+            return new Date(first.start);
+        }
+
+        if (d >= first.start && d < first.end) {
+            return d;
+        }
+
+        if (d >= first.end && d < second.start) {
+            return new Date(second.start);
+        }
+
+        if (d >= second.start && d < second.end) {
+            return d;
+        }
+
+        // d >= second.end -> carry overflow to next business day
+        const overflowMs = d.getTime() - second.end.getTime();
+        d = nextBusinessDayStart(d, morningStart);
+        d = new Date(d.getTime() + overflowMs);
+        // loop continua
+    }
 };
 
 // Estima a entrega com base no total de peças do pedido (totalPieces)
@@ -156,36 +251,31 @@ const estimateEntregaFromPieces = (totalPieces) => {
     const pieces = Number(totalPieces) || 0;
     // 2.5 horas por peça
     const totalHours = pieces * 2.5;
-    // janela de trabalho: 09:00 - 18:00 (9 horas por dia úteis)
-    const workDayHours = 9;
 
-    // Determina o início da produção: se agora estiver fora do expediente, começa no próximo dia útil às 09:00
+    // Determina o início da produção: se agora estiver fora do expediente, começa no próximo dia útil no primeiro turno
     const now = new Date();
     let start = new Date(now);
 
-    // se hoje não for dia útil -> próximo dia útil às 09:00
     if (!isBusinessDay(start)) {
-        start = nextBusinessDayStart(start, 9);
+        start = nextBusinessDayStart(start, 8.5);
     } else {
-        // hoje é dia útil -> checar horário
-        const todayStart = new Date(start);
-        todayStart.setHours(9,0,0,0);
-        const todayEnd = new Date(start);
-        todayEnd.setHours(18,0,0,0);
-
-        if (start < todayStart) {
-            start = todayStart;
-        } else if (start >= todayEnd) {
-            // inicia no próximo dia útil às 09:00
-            start = nextBusinessDayStart(start, 9);
+        const shifts = getWorkShiftsForDay(start, 8.5, 12, 13.5, 18);
+        if (start < shifts[0].start) {
+            start = new Date(shifts[0].start);
+        } else if (start >= shifts[1].end) {
+            start = nextBusinessDayStart(start, 8.5);
         }
+        // if between shifts and before afternoon start, start will be advanced by addBusinessTime
     }
 
-    // Se não houver peças (0), considerar 0 horas de produção -> entrega = próximo dia útil + 1 dia logístico
-    const productionEnd = addBusinessTime(start, totalHours, 9, 18);
+    // calcula fim da produção em HORAS ÚTEIS (contando apenas turnos)
+    const productionEnd = addBusinessTime(start, totalHours, 8.5, 12, 13.5, 18);
 
-    // adicionar 1 dia útil para logística/entrega preservando horário do fim de produção
-    const entregaDate = addBusinessDaysKeepTime(productionEnd, 1);
+    // Em seguida, adicionar 24 HORAS ÚTEIS (24 horas de trabalho) antes da entrega
+    const postProductionEnd = addBusinessTime(productionEnd, 24, 8.5, 12, 13.5, 18);
+
+    // Garantir que a data final esteja dentro de um turno (alinha se necessário)
+    const entregaDate = alignToBusinessWindowAtOrAfter(postProductionEnd, 8.5, 12, 13.5, 18);
     return entregaDate.toISOString();
 };
 
