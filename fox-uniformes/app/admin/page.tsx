@@ -749,13 +749,16 @@ export default function AdminDashboardPage() {
   const handleToggleCategoria = async (categoriaId: string, ativo: boolean) => {
     try {
       const response = await fetch(`${API_URL}/categorias/${categoriaId}`, { method: "PUT", headers: getAuthHeaders(), body: JSON.stringify({ ativo: !ativo }) });
-      if (response.ok) { setMessage({ type: "success", text: `Categoria ${ativo ? "desativada" : "ativada"} com sucesso!` }); fetchCategorias(); } else setMessage({ type: "error", text: "Erro ao atualizar categoria" });
+      if (response.ok) { setMessage({ type: "success", text: `Categoria ${ativo ? "desativada" : "ativada"} com sucesso!` }); fetchCategorias(); fetchProdutos(); } else setMessage({ type: "error", text: "Erro ao atualizar categoria" });
     } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
   };
 
   const handleDeletarCategoria = async (categoriaId: string) => {
     if (!confirm("Tem certeza que deseja excluir esta categoria? Produtos vinculados podem ser afetados.")) return;
-    try { const response = await fetch(`${API_URL}/categorias/${categoriaId}`, { method: "DELETE", headers: getAuthHeaders() }); if (response.ok) { setMessage({ type: "success", text: "Categoria excluída com sucesso!" }); fetchCategorias(); } else setMessage({ type: "error", text: "Erro ao excluir categoria" }); } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
+    try {
+      const response = await fetch(`${API_URL}/categorias/${categoriaId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (response.ok) { setMessage({ type: "success", text: "Categoria excluída com sucesso!" }); fetchCategorias(); fetchProdutos(); } else setMessage({ type: "error", text: "Erro ao excluir categoria" });
+    } catch (err) { setMessage({ type: "error", text: "Erro ao conectar com o servidor" }); }
   };
 
   const handleLogout = () => { localStorage.removeItem("token"); router.push("/"); };

@@ -513,13 +513,58 @@ export default function DashboardPage() {
     return true;
   };
 
+  // Função para validar cliente em edição (utilizada no modal)
+  const isClienteValido = (c: Cliente | null) => {
+    if (!c) return false;
+    if (!c.nome || !c.nome.trim()) return false;
+    if (!validarCPF(c.cpf || '')) return false;
+    if (!c.email || !c.email.includes('@')) return false;
+    if (!c.telefone || c.telefone.replace(/\D/g, '').length < 8) return false;
+    return true;
+  };
+
+  // Função para validar novo cliente (criação rápida)
+  const isNovoClienteValido = (c: typeof novoCliente) => {
+    if (!c) return false;
+    if (!c.nome || !c.nome.trim()) return false;
+    if (!validarCPF(c.cpf || '')) return false;
+    if (!c.email || !c.email.includes('@')) return false;
+    if (!c.telefone || c.telefone.replace(/\D/g, '').length < 8) return false;
+    return true;
+  };
+
   // Função para atualizar cliente
   const handleAtualizarCliente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clienteEditando) return;
-    
     setLoading(true);
     setMessage(null);
+    setErroValidacaoCPF(null);
+
+    // Validações antes de enviar
+    if (!clienteEditando.nome || !clienteEditando.nome.trim()) {
+      setErroValidacaoCPF('Nome é obrigatório');
+      setLoading(false);
+      return;
+    }
+
+    if (!validarCPF(clienteEditando.cpf || '')) {
+      setErroValidacaoCPF('CPF inválido! Por favor, verifique o número digitado.');
+      setLoading(false);
+      return;
+    }
+
+    if (!clienteEditando.email || !clienteEditando.email.includes('@')) {
+      setErroValidacaoCPF('E-mail inválido');
+      setLoading(false);
+      return;
+    }
+
+    if (!clienteEditando.telefone || clienteEditando.telefone.replace(/\D/g, '').length < 8) {
+      setErroValidacaoCPF('Telefone inválido');
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${API_URL}/clientes/${clienteEditando._id}`, {
@@ -555,6 +600,7 @@ export default function DashboardPage() {
     const cpfLimpo = cpf.replace(/\D/g, "");
     if (cpfLimpo.length !== 11) {
       setClienteSelecionado(null);
+      setMessage({ type: 'error', text: 'CPF incompleto. Digite 11 dígitos para buscar o cliente.' });
       return;
     }
 
@@ -580,10 +626,12 @@ export default function DashboardPage() {
           nomeCliente: "",
           telefoneCliente: "",
         }));
+        setMessage({ type: 'error', text: 'Cliente não encontrado para o CPF informado.' });
       }
     } catch (error) {
       console.error("Erro ao buscar cliente:", error);
       setClienteSelecionado(null);
+      setMessage({ type: 'error', text: 'Erro ao buscar cliente. Tente novamente.' });
     } finally {
       setBuscandoCliente(false);
     }
@@ -728,6 +776,44 @@ export default function DashboardPage() {
     setLoading(true);
     setMessage(null);
 
+    // Validar CEP antes de enviar (remover não dígitos e exigir 8 números)
+    const cepLimpo = (novoTrajeto.cep || '').replace(/\D/g, '');
+    if (!cepLimpo || cepLimpo.length !== 8) {
+      setMessage({ type: 'error', text: 'CEP inválido. Informe um CEP com 8 dígitos.' });
+      setLoading(false);
+      return;
+    }
+
+    // Tentar consultar ViaCEP para validar e preencher campos opcionais (cidade/estado/rua/bairro)
+    try {
+      const viaCepRes = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      if (viaCepRes.ok) {
+        const viaCepData = await viaCepRes.json();
+        if (viaCepData && !viaCepData.erro) {
+          // Preenche campos somente se estiverem vazios no formulário
+          setNovoTrajeto(prev => ({
+            ...prev,
+            cidade: prev.cidade || viaCepData.localidade || prev.cidade,
+            estado: prev.estado || viaCepData.uf || prev.estado,
+            rua: prev.rua || viaCepData.logradouro || prev.rua,
+            bairro: prev.bairro || viaCepData.bairro || prev.bairro,
+          }));
+          // small delay to allow state patching before submit (non-blocking)
+          await new Promise(res => setTimeout(res, 100));
+        } else {
+          setMessage({ type: 'error', text: 'CEP não encontrado. Verifique o CEP informado.' });
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Se ViaCEP indisponível, apenas prosseguir com validação básica
+        console.warn('ViaCEP indisponível, prosseguindo com envio sem preenchimento automático');
+      }
+    } catch (err) {
+      console.warn('Erro ao consultar ViaCEP:', err);
+      // prossegue mesmo se a consulta falhar
+    }
+
     try {
       const response = await fetch(`${API_URL}/trajeto`, {
         method: "POST",
@@ -763,7 +849,14 @@ export default function DashboardPage() {
     setMessage(null);
     setErroValidacaoCPF(null);
 
-    // Validar CPF antes de enviar
+    // Validações antes de enviar
+    if (!isNovoClienteValido(novoCliente)) {
+      setErroValidacaoCPF('Preencha Nome, CPF, E-mail e Telefone válidos antes de criar o cliente.');
+      setLoading(false);
+      return;
+    }
+
+    // Validar CPF antes de enviar (duplicado por segurança adicional)
     if (!validarCPF(novoCliente.cpf)) {
       setErroValidacaoCPF("CPF inválido! Por favor, verifique o número digitado.");
       setLoading(false);
@@ -1192,13 +1285,18 @@ export default function DashboardPage() {
                         <input className="input-gold" placeholder="CEP" value={novoCliente.cep} onChange={e => setNovoCliente(s => ({ ...s, cep: e.target.value }))} />
                         <input className="input-gold" placeholder="Complemento" value={novoCliente.complemento} onChange={e => setNovoCliente(s => ({ ...s, complemento: e.target.value }))} />
 
+                        {/* Mostrar erro de validação */}
+                        {erroValidacaoCPF && (
+                          <div className="text-red-400 text-sm col-span-full">{erroValidacaoCPF}</div>
+                        )}
+
                         <div className="col-span-full md:col-span-2 flex gap-2">
-                          <button className="btn btn-gold" type="submit">Criar Cliente</button>
-                          <button type="button" className="btn btn-ghost" onClick={() => setShowNovoCliente(false)}>Cancelar</button>
-                        </div>
-                      </form>
-                    </div>
-                  )}
+                          <button className="btn btn-gold" type="submit" disabled={loading || !isNovoClienteValido(novoCliente)}>{loading ? 'Criando...' : 'Criar Cliente'}</button>
+                           <button type="button" className="btn btn-ghost" onClick={() => setShowNovoCliente(false)}>Cancelar</button>
+                         </div>
+                       </form>
+                     </div>
+                   )}
 
                   {/* Lista de clientes */}
                   <div className="bg-card p-4 rounded">
@@ -1234,8 +1332,14 @@ export default function DashboardPage() {
                       <input className="input-gold" value={clienteEditando.cpf} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, cpf: e.target.value }) : prev)} />
                       <input className="input-gold" value={clienteEditando.email} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, email: e.target.value }) : prev)} />
                       <input className="input-gold" value={clienteEditando.telefone} onChange={e => setClienteEditando(prev => prev ? ({ ...prev, telefone: e.target.value }) : prev)} />
+
+                      {/* Mostrar erro de validação quando aplicável */}
+                      {erroValidacaoCPF && (
+                        <div className="text-red-400 text-sm">{erroValidacaoCPF}</div>
+                      )}
+
                       <div className="flex gap-2 mt-4">
-                        <button className="btn btn-gold" type="submit" disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</button>
+                        <button className="btn btn-gold" type="submit" disabled={loading || !isClienteValido(clienteEditando)}>{loading ? 'Salvando...' : 'Salvar'}</button>
                         <button type="button" className="btn btn-ghost" onClick={() => setMostrarModalEdicao(false)}>Cancelar</button>
                       </div>
                     </form>

@@ -20,6 +20,7 @@ interface Pedido {
 interface Pagamento {
   _id: string;
   clienteId: {
+    _id?: string;
     nome: string;
     cpf: string;
     email: string;
@@ -47,8 +48,9 @@ export default function PagamentoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // metodoPagamento starts null so we don't auto-show PIX when user opens the link
   const [metodoPagamento, setMetodoPagamento] =
-    useState<"PIX" | "CREDIT_CARD">("PIX");
+    useState<"PIX" | "CREDIT_CARD" | null>(null);
 
   const [parcelas, setParcelas] = useState(1);
   const [processando, setProcessando] = useState(false);
@@ -146,6 +148,18 @@ export default function PagamentoPage() {
   });
 
   const [cardError, setCardError] = useState<string | null>(null);
+
+  // Estados para cupom de desconto
+  const [codigoCupom, setCodigoCupom] = useState("");
+  const [cupomAplicado, setCupomAplicado] = useState<{
+    _id: string;
+    codigo: string;
+    desconto: number;
+    valorDesconto: number;
+    valorFinal: number;
+  } | null>(null);
+  const [validandoCupom, setValidandoCupom] = useState(false);
+  const [erroCupom, setErroCupom] = useState<string | null>(null);
 
   const mpInstance = useRef<any>(null);
 
@@ -350,6 +364,9 @@ export default function PagamentoPage() {
               paymentMethodId,
               issuerId,
               email: cardForm.email,
+              // Informar ao backend o cupom aplicado e o valor final visível (se houver)
+              cupomId: cupomAplicado?._id || null,
+              valorComCupom: cupomAplicado ? cupomAplicado.valorFinal : pagamento.valorTotal
             }),
           }
         );
@@ -383,30 +400,41 @@ export default function PagamentoPage() {
     } catch (err) {
       console.error(err);
 
-      // Primeiro tentar checar o status do pagamento no backend — em muitos casos o erro ocorreu
-      // depois que o backend já processou a cobrança, então a verificação evitará mostrar
-      // mensagens internas (ex.: "Cannot read properties of undefined (reading 'id')") ao usuário.
+      // Ao invés de mostrar a mensagem técnica do SDK, vamos tentar consultar o status
+      // do pagamento repetidamente por alguns segundos — em muitos casos o backend já
+      // processou a transação e só falta o webhook/polling atualizar a UI.
       try {
         if (pagamento?._id) {
-          const statusRes = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
-          if (statusRes.ok) {
-            const statusData = await statusRes.json().catch(() => null);
-            if (statusData && statusData.status === 'Aprovado') {
-              // Atualiza UI como pago e não mostra erro técnico
-              setPagamento(statusData);
-              setAguardandoConfirmacao(false);
-              setProcessando(false);
-              setCardError(null);
-              return;
+          const maxRetries = 6;
+          const retryDelayMs = 2000;
+
+          for (let i = 0; i < maxRetries; i++) {
+            try {
+              const statusRes = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
+              if (statusRes.ok) {
+                const statusData = await statusRes.json().catch(() => null);
+                if (statusData && statusData.status === 'Aprovado') {
+                  setPagamento(statusData);
+                  setAguardandoConfirmacao(false);
+                  setProcessando(false);
+                  setCardError(null);
+                  return; // pronto
+                }
+              }
+            } catch (e) {
+              console.warn('Tentativa de verificar status falhou (silenciosa):', e);
             }
+
+            // aguardar antes da próxima verificação
+            await new Promise(res => setTimeout(res, retryDelayMs));
           }
         }
       } catch (statusErr) {
         console.warn('Erro ao consultar status após falha no pagamento:', statusErr);
       }
 
-      // Se não foi aprovado, mostra mensagem amigável em vez de mensagem técnica
-      setCardError('Erro ao processar pagamento. Verifique os dados e tente novamente.');
+      // Se não confirmou após tentativas, mostrar mensagem amigável e permitir tentar novamente
+      setCardError('Erro ao processar pagamento. Se o valor foi debitado, aguarde alguns segundos e atualize a página ou contate o suporte.');
       setProcessando(false);
     }
   };
@@ -448,8 +476,7 @@ export default function PagamentoPage() {
   /* ================= TENTAR BUSCAR PIX AUTOMATICAMENTE (executa enquanto a página estiver montada) ================= */
   useEffect(() => {
     if (!pagamento?._id) return;
-
-    // Só tenta quando método PIX for a seleção atual (padrão) — evita chamadas desnecessárias
+    // Só tenta quando método PIX for explicitamente selecionado
     if (metodoPagamento !== 'PIX') return;
 
     let cancelled = false;
@@ -602,9 +629,68 @@ export default function PagamentoPage() {
             ))}
           </div>
 
+          {/* Cupom de desconto (novo) */}
+          <div className="mb-4">
+            {cupomAplicado ? (
+              <div className="bg-green-900/20 p-3 rounded mb-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="font-semibold">Cupom aplicado: {cupomAplicado.codigo}</div>
+                    <div className="text-sm kv-muted">Desconto: {cupomAplicado.desconto}% — R$ {cupomAplicado.valorDesconto?.toFixed(2)}</div>
+                  </div>
+                  <button className="text-sm text-red-400" onClick={() => { setCupomAplicado(null); setCodigoCupom(''); setErroCupom(null); }}>
+                    Remover
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Código do cupom"
+                  className="flex-1 bg-gray-700 rounded-lg px-4 py-3 focus:outline-none"
+                  value={codigoCupom}
+                  onChange={e => setCodigoCupom(e.target.value)}
+                />
+                <button
+                  onClick={async () => {
+                    if (!codigoCupom.trim()) { setErroCupom('Digite um código de cupom'); return; }
+                    setValidandoCupom(true); setErroCupom(null);
+                    try {
+                      const resp = await fetch(`${API_URL}/cupons/validar`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ codigo: codigoCupom, valorPedido: pagamento.valorTotal, clienteId: pagamento.clienteId?._id })
+                      });
+                      const data = await resp.json();
+                      if (data.valido) {
+                        // normalizar resposta do backend para o formato usado aqui
+                        const cup = data.cupom || data;
+                        const valorDesconto = (pagamento.valorTotal * (cup.desconto || 0)) / 100;
+                        const valorFinal = pagamento.valorTotal - valorDesconto;
+                        setCupomAplicado({ _id: cup._id || cup.id, codigo: cup.codigo || codigoCupom, desconto: cup.desconto || 0, valorDesconto, valorFinal });
+                        setErroCupom(null);
+                      } else {
+                        setErroCupom(data.mensagem || 'Cupom inválido');
+                        setCupomAplicado(null);
+                      }
+                    } catch (e) {
+                      console.error('Erro ao validar cupom:', e);
+                      setErroCupom('Erro ao validar cupom');
+                    } finally {
+                      setValidandoCupom(false);
+                    }
+                  }}
+                  className="px-4 py-3 bg-blue-600 rounded-md text-white"
+                >{validandoCupom ? 'Validando...' : 'Aplicar'}</button>
+              </div>
+            )}
+            {erroCupom && <div className="text-red-400 text-sm mt-2">{erroCupom}</div>}
+          </div>
+
           <div className="flex justify-between items-center text-xl font-bold pt-4 border-t border-gray-600">
             <span>Total:</span>
-            <span className="text-green-400">R$ {pagamento.valorTotal?.toFixed(2)}</span>
+            <span className="text-green-400">R$ {(cupomAplicado ? cupomAplicado.valorFinal : pagamento.valorTotal)?.toFixed(2)}</span>
           </div>
         </div>
 
@@ -648,18 +734,18 @@ export default function PagamentoPage() {
                 className="w-full bg-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value={1}>
-                  1x de R$ {pagamento.valorTotal?.toFixed(2)} (sem juros)
+                  1x de R$ {(cupomAplicado ? cupomAplicado.valorFinal : pagamento.valorTotal)?.toFixed(2)} (sem juros)
                 </option>
                 {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
                   <option key={num} value={num}>
-                    {num}x de R$ {calcularParcela(pagamento.valorTotal, num).toFixed(2)}
+                    {num}x de R$ {calcularParcela((cupomAplicado ? cupomAplicado.valorFinal : pagamento.valorTotal) || 0, num).toFixed(2)}
                     {num > 1 && " (com juros)"}
                   </option>
                 ))}
               </select>
               {parcelas > 1 && (
                 <p className="text-xs kv-muted mt-2">
-                  Total com juros: R$ {(calcularParcela(pagamento.valorTotal, Number(parcelas)) * Number(parcelas)).toFixed(2)}
+                  Total com juros: R$ {(calcularParcela((cupomAplicado ? cupomAplicado.valorFinal : pagamento.valorTotal) || 0, Number(parcelas)) * Number(parcelas)).toFixed(2)}
                 </p>
               )}
             </div>
@@ -739,7 +825,7 @@ export default function PagamentoPage() {
         {/* Botão Pagar */}
         <Button
           onClick={handlePagar}
-          disabled={processando}
+          disabled={processando || !metodoPagamento}
           variant={metodoPagamento === "PIX" ? "gold" : "cta"}
           className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -749,7 +835,7 @@ export default function PagamentoPage() {
               Processando...
             </>
           ) : (
-            <>{metodoPagamento === "PIX" ? "💚 Pagar com PIX" : "💳 Pagar com Cartão"}</>
+            <>{metodoPagamento === "PIX" ? "💚 Pagar com PIX" : (metodoPagamento === "CREDIT_CARD" ? "💳 Pagar com Cartão" : 'Selecione forma de pagamento')}</>
           )}
         </Button>
 
