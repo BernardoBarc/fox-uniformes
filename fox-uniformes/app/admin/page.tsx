@@ -679,7 +679,33 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
-    if (!validarCPF(novoCliente.cpf)) { setMessage({ type: 'error', text: 'CPF inválido! Por favor, verifique o número.' }); setLoading(false); return; }
+    setErroValidacaoCPF(null);
+
+    // Validações do cliente (nome, CPF, email, telefone)
+    if (!novoCliente.nome || !novoCliente.nome.trim()) {
+      setErroValidacaoCPF('Nome é obrigatório');
+      setLoading(false);
+      return;
+    }
+
+    if (!validarCPF(novoCliente.cpf || '')) {
+      setErroValidacaoCPF('CPF inválido! Por favor, verifique o número.');
+      setLoading(false);
+      return;
+    }
+
+    if (!novoCliente.email || !novoCliente.email.includes('@')) {
+      setErroValidacaoCPF('E-mail inválido');
+      setLoading(false);
+      return;
+    }
+
+    if (!novoCliente.telefone || novoCliente.telefone.replace(/\D/g, '').length < 8) {
+      setErroValidacaoCPF('Telefone inválido');
+      setLoading(false);
+      return;
+    }
+
     try {
       const payload = { ...novoCliente, cpf: novoCliente.cpf.replace(/\D/g, '') };
       if (editClienteId) {
@@ -693,7 +719,7 @@ export default function AdminDashboardPage() {
           fetchClientes();
           setActiveTab('clientes');
         } else {
-          const error = await response.json();
+          const error = await response.json().catch(() => ({ error: 'Erro ao atualizar cliente' }));
           setMessage({ type: 'error', text: error.error || 'Erro ao atualizar cliente' });
         }
       } else {
@@ -706,7 +732,7 @@ export default function AdminDashboardPage() {
           fetchClientes();
           setActiveTab('clientes');
         } else {
-          const error = await response.json();
+          const error = await response.json().catch(() => ({ error: 'Erro ao cadastrar cliente' }));
           setMessage({ type: 'error', text: error.error || 'Erro ao cadastrar cliente' });
         }
       }

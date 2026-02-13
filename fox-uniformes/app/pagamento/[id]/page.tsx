@@ -225,6 +225,30 @@ export default function PagamentoPage() {
 
   /* ================= PAGAR ================= */
   const handlePagar = async () => {
+    // helper: tentar confirmar status do pagamento via backend (retries)
+    const tryConfirmStatus = async (maxRetries = 6, delayMs = 2000) => {
+      if (!pagamento?._id) return false;
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const statusRes = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
+          if (statusRes.ok) {
+            const statusData = await statusRes.json().catch(() => null);
+            if (statusData && statusData.status === 'Aprovado') {
+              setPagamento(statusData);
+              setAguardandoConfirmacao(false);
+              setProcessando(false);
+              setCardError(null);
+              return true;
+            }
+          }
+        } catch (e) {
+          // falha silenciosa — continuar tentando
+        }
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+      return false;
+    };
+
     if (!pagamento) return;
 
     // Reset de erros
@@ -371,17 +395,29 @@ export default function PagamentoPage() {
           }
         );
 
-        // Lê resposta do backend e mostra mensagem específica em caso de erro
+        // Se o backend respondeu com erro, tentar confirmar status antes de mostrar mensagem ao usuário
         if (!res.ok) {
+          const confirmed = await tryConfirmStatus();
+          if (confirmed) return; // já confirmado, não mostrar erro
+
           const err = await res.json().catch(() => ({}));
-          setCardError(err.error || 'Erro ao processar pagamento');
+          const serverMsg = err?.error || err?.message || 'Erro ao processar pagamento';
+          const hideRaw = /cannot read properties|cannot read property|undefined/i.test(String(serverMsg));
+          setCardError(hideRaw ? 'Erro ao processar pagamento. Se o valor foi debitado, aguarde alguns segundos e atualize a página.' : serverMsg);
           setProcessando(false);
           return;
         }
 
         const data = await res.json();
+
+        // Se o backend retornou sucesso=false, confirmar antes de mostrar mensagem
         if (!data?.sucesso) {
-          setCardError(data.error || 'Erro ao processar pagamento');
+          const confirmed = await tryConfirmStatus();
+          if (confirmed) return;
+
+          const serverMsg = data?.error || 'Erro ao processar pagamento';
+          const hideRaw = /cannot read properties|cannot read property|undefined/i.test(String(serverMsg));
+          setCardError(hideRaw ? 'Erro ao processar pagamento. Se o valor foi debitado, aguarde alguns segundos e atualize a página.' : serverMsg);
           setProcessando(false);
           return;
         }
@@ -404,31 +440,8 @@ export default function PagamentoPage() {
       // do pagamento repetidamente por alguns segundos — em muitos casos o backend já
       // processou a transação e só falta o webhook/polling atualizar a UI.
       try {
-        if (pagamento?._id) {
-          const maxRetries = 6;
-          const retryDelayMs = 2000;
-
-          for (let i = 0; i < maxRetries; i++) {
-            try {
-              const statusRes = await fetch(`${API_URL}/pagamentos/${pagamento._id}`);
-              if (statusRes.ok) {
-                const statusData = await statusRes.json().catch(() => null);
-                if (statusData && statusData.status === 'Aprovado') {
-                  setPagamento(statusData);
-                  setAguardandoConfirmacao(false);
-                  setProcessando(false);
-                  setCardError(null);
-                  return; // pronto
-                }
-              }
-            } catch (e) {
-              console.warn('Tentativa de verificar status falhou (silenciosa):', e);
-            }
-
-            // aguardar antes da próxima verificação
-            await new Promise(res => setTimeout(res, retryDelayMs));
-          }
-        }
+        const confirmed = await tryConfirmStatus();
+        if (confirmed) return;
       } catch (statusErr) {
         console.warn('Erro ao consultar status após falha no pagamento:', statusErr);
       }
