@@ -127,6 +127,35 @@ export default function DashboardPage() {
   const isSubmittingRef = useRef(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Estado para visualizar detalhes de um pedido (modal)
+  const [viewingPedido, setViewingPedido] = useState<any | null>(null);
+  const handleCloseViewingPedido = () => setViewingPedido(null);
+
+  // loading para ação de aceitar/atualizar pedido
+  const [acceptLoading, setAcceptLoading] = useState(false);
+
+  // Função para atualizar status do pedido (usar em Pedidos)
+  const handleUpdatePedidoStatus = async (pedidoId: string, novoStatus: string) => {
+    try {
+      setAcceptLoading(true);
+      const response = await fetch(`${API_URL}/pedidos/${pedidoId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: novoStatus }),
+      });
+      if (response.ok) {
+        setMessage({ type: 'success', text: `Pedido atualizado para "${novoStatus}"` });
+        fetchPedidos();
+      } else {
+        setMessage({ type: 'error', text: 'Erro ao atualizar pedido' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
+    } finally {
+      setAcceptLoading(false);
+    }
+  };
+
   // Estados para dados
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [trajetos, setTrajetos] = useState<Trajeto[]>([]);
@@ -1004,18 +1033,39 @@ export default function DashboardPage() {
             </div>
 
             {pedidos.length === 0 ? (
-              <div className="bg-card p-4 rounded">Nenhum pedido encontrado.</div>
+              <div className="p-4 text-white/60">Nenhum pedido encontrado.</div>
             ) : (
-              <div className="bg-card p-4 rounded space-y-2">
-                {pedidos.map(p => (
-                  <div key={p._id} className="flex items-center justify-between p-3 border-b border-white/6">
-                    <div>
-                      <div className="font-medium">{p.nomeCliente}</div>
-                      <div className="text-sm kv-muted">{new Date(p.createdAt).toLocaleString()}</div>
-                    </div>
-                    <div className="text-sm kv-muted">R$ {p.preco.toFixed(2)}</div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto bg-card rounded">
+                <table className="min-w-full text-left">
+                  <thead>
+                    <tr className="text-sm text-white/60 border-b border-white/6">
+                      <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">Data</th>
+                      <th className="px-4 py-3">Valor</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pedidos.map(p => (
+                      <tr key={p._id} className="border-b border-white/6 hover:bg-white/2">
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium text-white">{p.nomeCliente}</div>
+                          <div className="text-xs kv-muted">{p.produtoId?.name || ''}</div>
+                        </td>
+                        <td className="px-4 py-3 align-top text-sm kv-muted">{new Date(p.createdAt).toLocaleString()}</td>
+                        <td className="px-4 py-3 align-top text-sm">R$ {p.preco.toFixed(2)}</td>
+                        <td className="px-4 py-3 align-top text-sm">{p.status}</td>
+                        <td className="px-4 py-3 align-top text-sm flex gap-2">
+                          <button className="btn btn-ghost" onClick={() => setViewingPedido(p)}>Detalhes</button>
+                          {p.status !== 'Entregue' && (
+                            <button className="btn btn-primary" onClick={() => handleUpdatePedidoStatus(p._id, 'Entregue')}>Marcar Entregue</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -1028,155 +1078,23 @@ export default function DashboardPage() {
               <button className="btn btn-gold" onClick={() => setShowNovoTrajeto(true)}>Novo Trajeto</button>
             </div>
 
-            {showNovoTrajeto && (
-              <div className="bg-card p-4 rounded mb-4">
-                <form onSubmit={editTrajetoId ? (e) => { e.preventDefault(); handleSalvarTrajeto(e); } : handleCriarTrajeto} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="col-span-full md:col-span-2">
-                    <label className="text-sm text-white mb-1 block">Nome do Cliente</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.nomeCliente}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, nomeCliente: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Nome do Cliente"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-1">
-                    <label className="text-sm text-white mb-1 block">Data da Visita</label>
-                    <input
-                      type="date"
-                      value={novoTrajeto.dataVisita}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, dataVisita: e.target.value })}
-                      className="input-gold w-full"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-2">
-                    <label className="text-sm text-white mb-1 block">Cidade</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.cidade}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, cidade: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Cidade"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-1">
-                    <label className="text-sm text-white mb-1 block">Estado</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.estado}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, estado: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Estado"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-2">
-                    <label className="text-sm text-white mb-1 block">Rua</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.rua}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, rua: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Rua"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-1">
-                    <label className="text-sm text-white mb-1 block">Número</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.numero}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, numero: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Número"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-2">
-                    <label className="text-sm text-white mb-1 block">Bairro</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.bairro}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, bairro: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Bairro"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-1">
-                    <label className="text-sm text-white mb-1 block">CEP</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.cep}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, cep: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="CEP"
-                      required
-                    />
-                  </div>
-
-                  <div className="col-span-full">
-                    <label className="text-sm text-white mb-1 block">Complemento</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.complemento}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, complemento: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Complemento"
-                    />
-                  </div>
-
-                  <div className="col-span-full">
-                    <label className="text-sm text-white mb-1 block">Ponto de Referência</label>
-                    <input
-                      type="text"
-                      value={novoTrajeto.pontoReferencia}
-                      onChange={e => setNovoTrajeto({ ...novoTrajeto, pontoReferencia: e.target.value })}
-                      className="input-gold w-full"
-                      placeholder="Ponto de Referência"
-                    />
-                  </div>
-
-                  <div className="col-span-full md:col-span-3 flex gap-2"><button className="btn btn-gold" type="submit">{editTrajetoId ? 'Salvar' : 'Criar Trajeto'}</button><button type="button" className="btn btn-ghost" onClick={() => { setShowNovoTrajeto(false); setEditTrajetoId(null); setNovoTrajeto({ nomeCliente: '', cidade: '', estado: '', rua: '', bairro: '', cep: '', complemento: '', numero: '', pontoReferencia: '', dataVisita: '' }); }}>Cancelar</button></div>
-                </form>
-              </div>
-            )}
-
             {trajetos.length === 0 ? (
-              <div className="bg-card p-4 rounded">Nenhum trajeto encontrado.</div>
+              <div className="p-4 text-white/60">Nenhum trajeto cadastrado.</div>
             ) : (
-              <div className="bg-card p-4 rounded space-y-2">
-                {trajetos.map(t => {
-                  const canManage = String((t as any).vendedorId?._id || (t as any).vendedorId) === String(userData!.id);
-                  return (
-                    <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
-                      <div>
-                        <div className="font-medium">{t.nomeCliente}</div>
-                        <div className="text-sm kv-muted">{t.cidade} - {t.estado}</div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-sm kv-muted">{new Date(t.createdAt).toLocaleDateString()}</div>
-                        {canManage && (
-                          <div className="flex gap-2">
-                            <button className="btn btn-ghost" onClick={() => handleEditarTrajeto(t)}>Editar</button>
-                            <button className="btn btn-primary" onClick={() => { if (confirm('Tem certeza que deseja excluir este trajeto?')) handleDeletarTrajeto(t._id); }}>Excluir</button>
-                          </div>
-                        )}
-                      </div>
+              <div className="space-y-2">
+                {trajetos.map(t => (
+                  <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                    <div>
+                      <div className="font-medium text-white">{t.nomeCliente}</div>
+                      <div className="text-sm kv-muted">{t.cidade} - {t.estado} • {t.rua} { (t as any).numero || '' }</div>
+                      <div className="text-xs kv-muted">Visita: {t.dataVisita ? new Date(t.dataVisita).toLocaleDateString() : '—'}</div>
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-2">
+                      <button className="btn btn-ghost" onClick={() => handleEditarTrajeto(t)}>Editar</button>
+                      <button className="btn btn-ghost btn-danger" onClick={() => handleDeletarTrajeto(t._id)}>Excluir</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1186,18 +1104,20 @@ export default function DashboardPage() {
           <div className="bg-card p-4 rounded">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg text-white font-semibold">Meus Clientes</h2>
-              <button className="btn btn-gold" onClick={() => setActiveTab("novoCliente")}>Novo Cliente</button>
+              <div>
+                <button className="btn btn-gold mr-2" onClick={() => setShowNovoCliente(true)}>Novo Cliente</button>
+              </div>
             </div>
 
             {clientes.length === 0 ? (
-              <div className="bg-card p-4 rounded">Nenhum cliente encontrado.</div>
+              <div className="p-4 text-white/60">Nenhum cliente encontrado.</div>
             ) : (
-              <div className="bg-card p-4 rounded space-y-2">
+              <div className="space-y-2">
                 {clientes.map(c => (
                   <div key={c._id} className="flex items-center justify-between p-3 border-b border-white/6">
                     <div>
-                      <div className="font-medium">{c.nome}</div>
-                      <div className="text-sm kv-muted">{c.email}</div>
+                      <div className="font-medium text-white">{c.nome}</div>
+                      <div className="text-sm kv-muted">{c.email} • {c.cidade} - {c.estado}</div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-sm kv-muted">{c.telefone}</div>
