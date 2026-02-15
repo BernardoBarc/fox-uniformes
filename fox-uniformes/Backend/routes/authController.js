@@ -10,6 +10,7 @@ const router = express.Router();
 router.post('/esqueci-senha', async (req, res) => {
   try {
     const { email } = req.body;
+    console.log('[AUTH] /auth/esqueci-senha called for:', email);
     if (!email) return res.status(400).json({ error: 'Email obrigatório' });
 
     const user = await userService.findByEmail(email);
@@ -36,7 +37,8 @@ router.post('/esqueci-senha', async (req, res) => {
     res.json({ message: 'Se o email existir, enviamos instruções.' });
   } catch (err) {
     console.error('Erro /auth/esqueci-senha:', err);
-    res.status(500).json({ error: 'Erro interno' });
+    // Retornar erro detalhado para facilitar debug em ambiente controlado
+    res.status(500).json({ error: 'Erro interno', details: err && err.message ? err.message : String(err) });
   }
 });
 
@@ -57,6 +59,30 @@ router.post('/reset-senha', async (req, res) => {
   } catch (err) {
     console.error('Erro /auth/reset-senha:', err);
     res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Rota de teste: envia um e-mail de recuperação para o endereço informado (usar apenas para debug)
+router.post('/esqueci-senha/test', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email obrigatório' });
+
+    // link de teste simples
+    const frontendBase = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : '';
+    const link = `${frontendBase}/Esqueci-senha/reset/test-token`;
+
+    await emailService.enviarRecuperacaoSenha({
+      para: email,
+      nome: email,
+      linkReset: link,
+      prazoHoras: 1,
+    });
+
+    res.json({ message: 'Email de teste enviado (se possível).' });
+  } catch (err) {
+    console.error('Erro /auth/esqueci-senha/test:', err);
+    res.status(500).json({ error: 'Erro ao enviar email de teste', details: err && err.message ? err.message : String(err) });
   }
 });
 

@@ -332,6 +332,8 @@ const enviarRecuperacaoSenha = async ({ para, nome, linkReset, prazoHoras = 1 })
     console.log(`📧 Email de recuperação enviado para ${para}`);
   } catch (err) {
     console.error('❌ Erro ao enviar e-mail de recuperação:', err);
+    // Re-throw para que o controller capture e possamos retornar detalhes para debug
+    throw err;
   }
 };
 
