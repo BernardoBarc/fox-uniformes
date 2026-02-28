@@ -132,6 +132,8 @@ export default function AdminDashboardPage() {
 
   // Trajetos - novo estado para criação rápida
   const [showNovoTrajeto, setShowNovoTrajeto] = useState(false);
+  // estado para controlar sidebar em telas móveis (apenas apresentação)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [novoTrajeto, setNovoTrajeto] = useState({ nomeCliente: "", cidade: "", estado: "", rua: "", bairro: "", cep: "", dataVisita: "", vendedorId: "" });
   const [editTrajetoId, setEditTrajetoId] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
@@ -824,7 +826,24 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-app text-app">
       <div className="container-responsive grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
-        <div className="lg:col-span-3"><div className="sticky top-6"><Sidebar active={activeTab} onChange={(t: TabType) => setActiveTab(t)} /></div></div>
+        <div className="lg:col-span-3 hidden md:block"><div className="sticky top-6"><Sidebar active={activeTab} onChange={(t: TabType) => setActiveTab(t)} /></div></div>
+
+        {/* botão para abrir sidebar no mobile */}
+        <div className="md:hidden lg:col-span-9">
+          <div className="mb-4">
+            <button type="button" className="btn btn-ghost" onClick={() => setMobileSidebarOpen(true)}>☰ Menu</button>
+          </div>
+        </div>
+
+        {/* Drawer de sidebar para mobile */}
+        {mobileSidebarOpen && (
+          <div className="fixed inset-0 z-50 flex">
+            <div className="w-72 bg-card p-4 border-r border-white/6">
+              <Sidebar active={activeTab} onChange={(t: TabType) => { setActiveTab(t); setMobileSidebarOpen(false); }} />
+            </div>
+            <div className="flex-1 bg-black/40" onClick={() => setMobileSidebarOpen(false)} />
+          </div>
+        )}
         <div className="lg:col-span-9">
           <main className="space-y-6 p-4">
             {message && <div className={`mb-4 p-4 rounded-lg ${message.type === "success" ? "bg-green-700/30" : "bg-red-700/30"}`}>{message.text}</div>}
@@ -1219,10 +1238,10 @@ export default function AdminDashboardPage() {
       {/* Modal de visualização de pedido */}
       {viewingPedido && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-card p-6 rounded w-full max-w-2xl">
+          <div className="bg-card p-6 rounded w-full max-w-2xl modal-responsive">
             <div className="flex items-start justify-between">
-              <h3 className="text-xl font-semibold">Detalhes do Pedido</h3>
-              <button className="text-sm text-white/60" onClick={handleCloseViewingPedido}>Fechar</button>
+              <h3 className="text-xl font-semibold">Pedido</h3>
+              <div className="text-sm text-white"><Button variant="ghost" onClick={() => setViewingPedido(null)}>Fechar</Button></div>
             </div>
             <div className="mt-4 space-y-3 text-sm">
               <div><strong>Cliente:</strong> {viewingPedido.nomeCliente}</div>

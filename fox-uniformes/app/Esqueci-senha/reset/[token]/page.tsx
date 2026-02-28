@@ -63,7 +63,7 @@ const ResetSenha: React.FC = () => {
   return (
     <main className="min-h-screen bg-app text-app flex items-center justify-center p-6">
       <div className="container-responsive w-full max-w-lg">
-        <div className="login-card mx-auto">
+        <div className="login-card mx-auto modal-responsive">
           <div className="flex flex-col items-center mb-4">
             <div className="w-28 h-28 flex items-center justify-center bg-transparent">
               <img src="/logoAmarelo.png" alt="Logo Fox" className="w-24 h-24 object-contain" />

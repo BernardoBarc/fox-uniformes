@@ -42,7 +42,7 @@ const EsqueciSenha: React.FC = () => {
     <main className="min-h-screen bg-app text-app flex items-center justify-center p-6">
       {/* Header removido para esta página */}
       <div className="container-responsive w-full max-w-lg">
-        <div className="login-card mx-auto">
+        <div className="login-card mx-auto modal-responsive">
           <div className="flex flex-col items-center mb-4">
             {/* usar logo amarela em vez do 'F' */}
             <div className="w-28 h-28 flex items-center justify-center bg-transparent">

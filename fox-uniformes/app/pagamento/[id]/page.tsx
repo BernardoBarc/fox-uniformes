@@ -171,7 +171,7 @@ export default function PagamentoPage() {
 
   const LoadingOverlay = (processando) ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-gray-800 p-6 rounded-lg flex flex-col items-center gap-4">
+      <div className="bg-gray-800 p-6 rounded-lg flex flex-col items-center gap-4 modal-responsive">
         <div className="animate-spin h-8 w-8 border-4 border-white rounded-full border-t-transparent"></div>
         <div className="text-white font-medium">{loadingMessage}</div>
       </div>

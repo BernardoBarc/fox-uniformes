@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "../config/api";
 import Sidebar from "../components/Sidebar";
+import Button from "../components/Button";
 
 // Tipos
 interface UserData {
@@ -204,6 +205,18 @@ export default function DashboardPage() {
   const [fotoItemAtual, setFotoItemAtual] = useState<File | null>(null);
   const [previewFotoAtual, setPreviewFotoAtual] = useState<string | null>(null);
 
+  // ref para o input de foto do item (usado pelo botão "Adicionar foto")
+  const fotoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleRemoveFotoItem = () => {
+    setFotoItemAtual(null);
+    setPreviewFotoAtual(null);
+    if (fotoInputRef.current) {
+      // limpa o input file para permitir reenvio do mesmo arquivo se necessário
+      try { fotoInputRef.current.value = '' } catch (e) { /* ignore */ }
+    }
+  };
+
   // Tamanhos disponíveis
   const tamanhosDisponiveis = ['PP', 'P', 'M', 'G', 'GG', 'XG', 'XXG', 'Único'];
 
@@ -290,6 +303,9 @@ export default function DashboardPage() {
   const [showNovoTrajeto, setShowNovoTrajeto] = useState(false);
   const [showNovoCliente, setShowNovoCliente] = useState(false);
 
+  // estado para controlar sidebar em telas móveis
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
   const getToken = () => localStorage.getItem("token");
 
   const getAuthHeaders = () => ({
@@ -298,8 +314,8 @@ export default function DashboardPage() {
   });
 
   // Função para montar URL da imagem
-  const getImageUrl = (photo: string | undefined) => {
-    if (!photo) return null;
+  const getImageUrl = (photo?: string) => {
+    if (!photo) return "";
     if (photo.startsWith("http")) return photo;
     return `${API_URL}${photo}`;
   };
@@ -455,15 +471,15 @@ export default function DashboardPage() {
   // Revalidar cupom quando o carrinho mudar
   useEffect(() => {
     if (cupomAplicado && totalCarrinho > 0) {
-      // Recalcular desconto com novo valor do carrinho
-      const valorDesconto = (totalCarrinho * cupomAplicado.desconto) / 100;
-      const valorFinal = totalCarrinho - valorDesconto;
+      const valorDesconto = (cupomAplicado.desconto / 100) * totalCarrinho;
+      const valorFinal = Math.max(0, totalCarrinho - valorDesconto);
       setCupomAplicado({
         ...cupomAplicado,
         valorDesconto,
         valorFinal,
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalCarrinho]);
 
   // Funções para criar novos registros
@@ -632,7 +648,7 @@ export default function DashboardPage() {
 
   // Função para buscar cliente por CPF
   const buscarClientePorCPF = async (cpf: string) => {
-    const cpfLimpo = cpf.replace(/\D/g, "");
+    const cpfLimpo = (cpf || '').replace(/\D/g, "");
     if (cpfLimpo.length !== 11) {
       setClienteSelecionado(null);
       setMessage({ type: 'error', text: 'CPF incompleto. Digite 11 dígitos para buscar o cliente.' });
@@ -650,8 +666,8 @@ export default function DashboardPage() {
         setClienteSelecionado(cliente);
         setNovoPedido(prev => ({
           ...prev,
-          nomeCliente: cliente.nome,
-          telefoneCliente: cliente.telefone,
+          nomeCliente: cliente.nome || '',
+          telefoneCliente: cliente.telefone || '',
         }));
         setMessage({ type: "success", text: `Cliente encontrado: ${cliente.nome}` });
       } else {
@@ -739,6 +755,10 @@ export default function DashboardPage() {
       if (firstPhotoFile) {
         formData.append("photo", firstPhotoFile);
       }
+      // anexo do pedido (opcional)
+      // if (anexoPedido) {
+      //   formData.append("anexo", anexoPedido);
+      // }
 
       const response = await fetch(`${API_URL}/pedidos`, {
         method: "POST",
@@ -954,6 +974,52 @@ export default function DashboardPage() {
     } catch (err) { setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' }); }
   };
 
+  // Função para criar novo cliente (via modal)
+  const handleCriarCliente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isNovoClienteValido(novoCliente)) {
+      setMessage({ type: 'error', text: 'Preencha corretamente os dados do cliente.' });
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+    try {
+      const payload = { ...novoCliente, vendedorId: userData?.id };
+      const response = await fetch(`${API_URL}/clientes`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cliente criado com sucesso!' });
+        setShowNovoCliente(false);
+        setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' });
+        fetchClientes();
+        setActiveTab('clientes');
+      } else {
+        const err = await response.json().catch(() => ({}));
+        setMessage({ type: 'error', text: err.error || 'Erro ao criar cliente' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para deletar cliente (só pode deletar se for proprietário — backend deve validar também)
+  const handleDeletarCliente = async (clienteId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+    try {
+      const response = await fetch(`${API_URL}/clientes/${clienteId}`, { method: 'DELETE', headers: getAuthHeaders() });
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Cliente excluído com sucesso!' });
+        fetchClientes();
+      } else {
+        setMessage({ type: 'error', text: 'Erro ao excluir cliente' });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Erro ao conectar com o servidor' });
+    }
+  };
+
   // Helper: converte DD/MM/AAAA ou AAAA-MM-DD para ISO AAAA-MM-DD
   const convertDateToISO = (dateStr: string) => {
     if (!dateStr) return "";
@@ -968,421 +1034,822 @@ export default function DashboardPage() {
     return dateStr;
   };
 
+  // Helper para mapear status para classes de cor (mesmo padrão do admin)
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "Pendente":
+        return "bg-yellow-500";
+      case "Em Progresso":
+      case "Em Andamento":
+        return "bg-blue-500";
+      case "Em Trânsito":
+        return "bg-indigo-500";
+      case "Concluído":
+        return "bg-green-500";
+      case "Cancelado":
+        return "bg-red-500";
+      case "Aguardando Pagamento":
+        return "bg-purple-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
+
+  // Funções para manipular seleção de categoria/produto/tamanho e upload de foto do item atual
+  const handleSelectCategoria = (categoriaId: string) => {
+    setItemAtual(prev => ({ ...prev, categoria: categoriaId, produtoId: '', tamanho: '' }));
+  };
+
+  const handleSelectProduto = (produtoId: string) => {
+    setItemAtual(prev => ({ ...prev, produtoId }));
+  };
+
+  const handleSelectTamanho = (tamanho: string) => {
+    setItemAtual(prev => ({ ...prev, tamanho }));
+  };
+
+  const handleChangeQuantidade = (q: number) => {
+    setItemAtual(prev => ({ ...prev, quantidade: q }));
+  };
+
+  const handleFotoItemChange = (file?: File) => {
+    if (!file) {
+      setFotoItemAtual(null);
+      setPreviewFotoAtual(null);
+      return;
+    }
+    setFotoItemAtual(file);
+    try {
+      const url = URL.createObjectURL(file);
+      setPreviewFotoAtual(url);
+    } catch (err) {
+      setPreviewFotoAtual(null);
+    }
+  };
+
+  // Helper para consulta rápida de CEP no formulário de trajeto (preenche cidade/estado/rua/bairro)
+  const handleLookupCep = async (cepRaw: string) => {
+    const cep = (cepRaw || '').toString().replace(/\D/g, '');
+    if (cep.length !== 8) {
+      setMessage({ type: 'error', text: 'CEP deve ter 8 dígitos' });
+      return;
+    }
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (!res.ok) throw new Error('Falha ao consultar CEP');
+      const data = await res.json();
+      if (data.erro) {
+        setMessage({ type: 'error', text: 'CEP não encontrado' });
+        return;
+      }
+      setNovoTrajeto(prev => ({
+        ...prev,
+        cidade: prev.cidade || data.localidade || prev.cidade,
+        estado: prev.estado || data.uf || prev.estado,
+        rua: prev.rua || data.logradouro || prev.rua,
+        bairro: prev.bairro || data.bairro || prev.bairro,
+      }));
+      setMessage({ type: 'success', text: 'CEP preenchido' });
+    } catch (err) {
+      console.warn('Erro lookup CEP:', err);
+      setMessage({ type: 'error', text: 'Erro ao consultar CEP' });
+    }
+  };
+
+  // determinar se o user é admin (várias possíveis chaves: role, isAdmin, roles[])
+  const isAdmin = Boolean(userData && (
+    (userData as any).isAdmin ||
+    (userData as any).role === 'admin' ||
+    ((userData as any).roles && Array.isArray((userData as any).roles) && (userData as any).roles.includes('admin'))
+  ));
+
   return (
-    <div className="flex flex-col md:flex-row h-screen">
-      <Sidebar active={activeTab} onChange={(t) => setActiveTab(t as any)} items={[
-        { key: 'dashboard', label: '📊 Dashboard' },
-        { key: 'pedidos', label: '📦 Pedidos' },
-        { key: 'novoPedido', label: '💸 Realizar Venda' },
-        { key: 'trajetos', label: '🗺️ Trajetos' },
-        { key: 'clientes', label: '👤 Clientes' },
-      ]} />
-
-      <div className="flex-1 p-4 overflow-auto">
-        <div className="mb-4">
-          <h1 className="text-2xl text-white font-bold">Dashboard</h1>
+    <div className="min-h-screen bg-app text-app">
+      <div className="container-responsive grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
+        <div className="lg:col-span-3 hidden md:block">
+          <div className="sticky top-6">
+            <Sidebar active={activeTab} onChange={(t) => setActiveTab(t as any)} items={[
+              { key: 'dashboard', label: '📊 Dashboard' },
+              { key: 'pedidos', label: '📦 Pedidos' },
+              { key: 'novoPedido', label: '💸 Realizar Venda' },
+              { key: 'trajetos', label: '🗺️ Trajetos' },
+              { key: 'clientes', label: '👤 Clientes' },
+            ]} />
+          </div>
         </div>
 
-        {message && (
-          <div className={`p-3 rounded ${message.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
-            {message.text}
+        <div className="lg:col-span-9">
+          {/* botão para abrir sidebar no mobile */}
+          <div className="md:hidden mb-4">
+            <button type="button" className="btn btn-ghost" onClick={() => setMobileSidebarOpen(true)}>☰ Menu</button>
           </div>
-        )}
+          
+          {/* Drawer de sidebar para mobile */}
+          {mobileSidebarOpen && (
+            <div className="fixed inset-0 z-50 flex">
+              <div className="w-72 bg-card p-4 border-r border-white/6">
+                <Sidebar active={activeTab} onChange={(t) => { setActiveTab(t as any); setMobileSidebarOpen(false); }} items={[
+                  { key: 'dashboard', label: '📊 Dashboard' },
+                  { key: 'pedidos', label: '📦 Pedidos' },
+                  { key: 'novoPedido', label: '💸 Realizar Venda' },
+                  { key: 'trajetos', label: '🗺️ Trajetos' },
+                  { key: 'clientes', label: '👤 Clientes' },
+                ]} />
+              </div>
+              <div className="flex-1 bg-black/40" onClick={() => setMobileSidebarOpen(false)} />
+            </div>
+          )}
 
-        {/* Abas principais */}
-        <div className="tabs tabs-boxed mb-4">
-          <a className={`tab cursor-pointer ${activeTab === "dashboard" ? "tab-active" : ""}`} onClick={() => setActiveTab("dashboard")}>Dashboard</a>
-          <a className={`tab cursor-pointer ${activeTab === "pedidos" ? "tab-active" : ""}`} onClick={() => setActiveTab("pedidos")}>Pedidos</a>
-          <a className={`tab cursor-pointer ${activeTab === "trajetos" ? "tab-active" : ""}`} onClick={() => setActiveTab("trajetos")}>Trajetos</a>
-          <a className={`tab cursor-pointer ${activeTab === "clientes" ? "tab-active" : ""}`} onClick={() => setActiveTab("clientes")}>Clientes</a>
-        </div>
+          <main className="space-y-6 p-4">
+            {message && (
+              <div className={`mb-4 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-700/30' : 'bg-red-700/30'}`}>
+                {message.text}
+              </div>
+            )}
 
-        {/* Conteúdo das abas */}
-        {activeTab === "dashboard" && (
-          <div className="bg-card p-4 rounded">
-            <h2 className="text-lg text-white font-semibold mb-2">Bem-vindo, {userData?.login}!</h2>
-            <p className="text-sm text-white/80">Aqui está um resumo rápido:</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-              <div className="bg-gray-800 p-4 rounded">
-                <div className="text-xs text-white/50 mb-1">Total de Pedidos</div>
-                <div className="text-lg text-white font-bold">{pedidos.length}</div>
-              </div>
-              <div className="bg-gray-800 p-4 rounded">
-                <div className="text-xs text-white/50 mb-1">Total de Trajetos</div>
-                <div className="text-lg text-white font-bold">{trajetos.length}</div>
-              </div>
-              <div className="bg-gray-800 p-4 rounded">
-                <div className="text-xs text-white/50 mb-1">Total de Clientes</div>
-                <div className="text-lg text-white font-bold">{clientes.length}</div>
-              </div>
-              <div className="bg-gray-800 p-4 rounded">
-                <div className="text-xs text-white/50 mb-1">Total em Vendas</div>
-                <div className="text-lg text-white font-bold">
-                  R$ {pedidos.reduce((acc, pedido) => acc + pedido.preco, 0).toFixed(2)}
+            {/* Painel resumido - mesmo visual do admin */}
+            <section>
+              <h2 className="text-3xl font-bold mb-4 kv-accent">Painel</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent)' }}>
+                  <h3 className="text-lg kv-muted">Pedidos Pendentes</h3>
+                  <p className="text-4xl font-bold kv-accent">{pedidos.filter(p => p.status === 'Pendente').length}</p>
+                </div>
+
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent-2)' }}>
+                  <h3 className="text-lg kv-muted">Trajetos</h3>
+                  <p className="text-4xl font-bold kv-accent">{trajetos.length}</p>
+                </div>
+
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'rgba(34,197,94,0.8)' }}>
+                  <h3 className="text-lg kv-muted">Clientes</h3>
+                  <p className="text-4xl font-bold text-success">{clientes.length}</p>
+                </div>
+
+                <div className="bg-card p-6 rounded-xl shadow-lg border-l-4" style={{ borderColor: 'var(--accent-2)' }}>
+                  <h3 className="text-lg kv-muted">Faturamento</h3>
+                  <p className="text-3xl font-bold kv-accent">R$ {pedidos.reduce((acc, pedido) => acc + (pedido.preco || 0), 0).toFixed(2)}</p>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            </section>
 
-        {activeTab === "pedidos" && (
-          <div className="bg-card p-4 rounded">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg text-white font-semibold">Meus Pedidos</h2>
-              <button className="btn btn-gold" onClick={() => setActiveTab("novoPedido")}>Novo Pedido</button>
-            </div>
-
-            {pedidos.length === 0 ? (
-              <div className="p-4 text-white/60">Nenhum pedido encontrado.</div>
-            ) : (
-              <div className="overflow-x-auto bg-card rounded">
-                <table className="min-w-full text-left">
-                  <thead>
-                    <tr className="text-sm text-white/60 border-b border-white/6">
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">Data</th>
-                      <th className="px-4 py-3">Valor</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pedidos.map(p => (
-                      <tr key={p._id} className="border-b border-white/6 hover:bg-white/2">
-                        <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-white">{p.nomeCliente}</div>
-                          <div className="text-xs kv-muted">{p.produtoId?.name || ''}</div>
-                        </td>
-                        <td className="px-4 py-3 align-top text-sm kv-muted">{new Date(p.createdAt).toLocaleString()}</td>
-                        <td className="px-4 py-3 align-top text-sm">R$ {p.preco.toFixed(2)}</td>
-                        <td className="px-4 py-3 align-top text-sm">{p.status}</td>
-                        <td className="px-4 py-3 align-top text-sm flex gap-2">
-                          <button className="btn btn-ghost" onClick={() => setViewingPedido(p)}>Detalhes</button>
-                          {p.status !== 'Entregue' && (
-                            <button className="btn btn-primary" onClick={() => handleUpdatePedidoStatus(p._id, 'Entregue')}>Marcar Entregue</button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "trajetos" && (
-          <div className="bg-card p-4 rounded">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg text-white font-semibold">Meus Trajetos</h2>
-              <button className="btn btn-gold" onClick={() => setShowNovoTrajeto(true)}>Novo Trajeto</button>
-            </div>
-
-            {trajetos.length === 0 ? (
-              <div className="p-4 text-white/60">Nenhum trajeto cadastrado.</div>
-            ) : (
-              <div className="space-y-2">
-                {trajetos.map(t => (
-                  <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
-                    <div>
-                      <div className="font-medium text-white">{t.nomeCliente}</div>
-                      <div className="text-sm kv-muted">{t.cidade} - {t.estado} • {t.rua} { (t as any).numero || '' }</div>
-                      <div className="text-xs kv-muted">Visita: {t.dataVisita ? new Date(t.dataVisita).toLocaleDateString() : '—'}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button className="btn btn-ghost" onClick={() => handleEditarTrajeto(t)}>Editar</button>
-                      <button className="btn btn-ghost btn-danger" onClick={() => handleDeletarTrajeto(t._id)}>Excluir</button>
-                    </div>
+            <section>
+              {/* Pedidos (mantém funcionalidades originais, apenas adota classes visuais do admin) */}
+              {activeTab === 'pedidos' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Meus Pedidos</h3>
+                    <Button variant="gold" onClick={() => setActiveTab('novoPedido')}>+ Novo Pedido</Button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        {activeTab === "clientes" && (
-          <div className="bg-card p-4 rounded">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg text-white font-semibold">Meus Clientes</h2>
-              <div>
-                <button className="btn btn-gold mr-2" onClick={() => setShowNovoCliente(true)}>Novo Cliente</button>
-              </div>
-            </div>
-
-            {clientes.length === 0 ? (
-              <div className="p-4 text-white/60">Nenhum cliente encontrado.</div>
-            ) : (
-              <div className="space-y-2">
-                {clientes.map(c => (
-                  <div key={c._id} className="flex items-center justify-between p-3 border-b border-white/6">
-                    <div>
-                      <div className="font-medium text-white">{c.nome}</div>
-                      <div className="text-sm kv-muted">{c.email} • {c.cidade} - {c.estado}</div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-sm kv-muted">{c.telefone}</div>
-                      <button className="btn btn-ghost" onClick={() => abrirEdicaoCliente(c)}>Editar</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Formulários rápidos (Novo Pedido, Novo Cliente) */}
-        {activeTab === "novoPedido" && (
-          <div className="bg-card p-4 rounded">
-            <h2 className="text-lg text-white font-semibold mb-4">Novo Pedido</h2>
-
-            <form onSubmit={handleFinalizarVenda} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-white mb-1 block">CPF do Cliente</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={novoPedido.cpfCliente}
-                    onChange={e => setNovoPedido({ ...novoPedido, cpfCliente: e.target.value })}
-                    className="input-gold flex-1"
-                    placeholder="Digite o CPF"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => buscarClientePorCPF(novoPedido.cpfCliente)}
-                    disabled={buscandoCliente}
-                  >
-                    {buscandoCliente ? 'Buscando...' : 'Buscar'}
-                  </button>
-                </div>
-                {clienteSelecionado && (
-                  <div className="mt-2 p-3 bg-green-500/10 text-green-900 rounded">
-                    Cliente encontrado: {clienteSelecionado.nome} - {clienteSelecionado.telefone}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Nome do Cliente</label>
-                <input
-                  type="text"
-                  value={novoPedido.nomeCliente}
-                  onChange={e => setNovoPedido({ ...novoPedido, nomeCliente: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Nome do Cliente"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Telefone do Cliente</label>
-                <input
-                  type="text"
-                  value={novoPedido.telefoneCliente}
-                  onChange={e => setNovoPedido({ ...novoPedido, telefoneCliente: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Telefone do Cliente"
-                  required
-                />
-              </div>
-
-              {/* Itens do pedido */}
-              <div className="col-span-full">
-                <label className="text-sm text-white mb-1 block">Itens do Pedido</label>
-                <div className="bg-gray-800 p-4 rounded">
-                  {carrinho.length === 0 ? (
-                    <div className="text-center text-white/50 py-2">Nenhum item no carrinho</div>
+                  {pedidosAtivos.length === 0 ? (
+                    <div className="bg-card p-6 rounded">Nenhum pedido encontrado.</div>
                   ) : (
-                    <div className="space-y-2">
-                      {carrinho.map(item => (
-                        <div key={item.id} className="flex justify-between items-center p-2 bg-gray-900 rounded">
-                          <div className="flex-1">
-                            <div className="text-sm text-white">{item.produtoNome} ({item.tamanho})</div>
-                            <div className="text-xs text-white/70">{item.observacoes}</div>
+                    <div className="bg-card p-4 rounded space-y-2">
+                      {pedidosAtivos.map(p => (
+                        <div key={p._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                          <div>
+                            <div className="font-medium">{p.nomeCliente}</div>
+                            <div className="text-sm kv-muted">{p.produtoId?.name || 'Produto'}</div>
                           </div>
-                          <div className="text-sm text-white">
-                            R$ {item.precoTotal.toFixed(2)}
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm kv-muted">R$ {p.preco?.toFixed(2)}</div>
+                            {/* controles de status: apenas admins podem alterar */}
+                            <div className="flex items-center gap-2">
+                              <Button variant="gold" onClick={() => setViewingPedido(p)}>Visualizar</Button>
+                              {isAdmin ? (
+                                p.status === 'Pendente' ? (
+                                  <Button variant="ghost" onClick={() => { if (confirm('Deseja recusar e cancelar este pedido?')) handleUpdatePedidoStatus(p._id, 'Cancelado'); }}>Recusar</Button>
+                                ) : (
+                                  <select className="input-gold text-sm text-app bg-card appearance-none px-2 py-1 rounded" value={p.status} onChange={(e) => { const novo = e.target.value; if (novo === 'Cancelado' && !confirm('Confirma cancelar este pedido?')) return; handleUpdatePedidoStatus(p._id, novo); }}>
+                                    <option value="Aguardando Pagamento">Aguardando Pagamento</option>
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="Em Progresso">Em Progresso</option>
+                                    <option value="Em Trânsito">Em Trânsito</option>
+                                    <option value="Concluído">Concluído</option>
+                                    <option value="Cancelado">Cancelado</option>
+                                  </select>
+                                )
+                              ) : (
+                                <div className={`inline-block px-2 py-1 rounded text-white ${getStatusColor(p.status)}`}>{p.status}</div>
+                              )}
+                            </div>
+                         </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Trajetos (mantém funcionalidades existentes) */}
+              {activeTab === 'trajetos' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Trajetos</h3>
+                    <Button variant="gold" onClick={() => setShowNovoTrajeto(true)}>+ Novo Trajeto</Button>
+                  </div>
+
+                  {trajetos.length === 0 ? (
+                    <div className="bg-card p-6 rounded">Nenhum trajeto cadastrado.</div>
+                  ) : (
+                    <div className="bg-card p-4 rounded space-y-2">
+                      {trajetos.map(t => (
+                        <div key={t._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                          <div>
+                            <div className="font-medium">{t.nomeCliente}</div>
+                            <div className="text-sm kv-muted">{t.cidade} - {t.estado} • {t.rua} { (t as any).numero || '' }</div>
+                            <div className="text-xs kv-muted">Visita: {t.dataVisita ? new Date(t.dataVisita).toLocaleDateString() : '—'}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {/* garantir que apenas o criador possa ver/editar/excluir */}
+                            {userData && ((((t as any).vendedorId === userData.id) || ((t as any).vendedorId && (t as any).vendedorId._id === userData.id))) ? (
+                              <>
+                                <Button variant="ghost" onClick={() => handleEditarTrajeto(t)}>Editar</Button>
+                                <Button variant="primary" onClick={() => handleDeletarTrajeto(t._id)}>Excluir</Button>
+                              </>
+                            ) : (
+                              <div className="text-sm kv-muted">Sem acesso</div>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              </div>
+              )}
 
-              {/* Cupom de desconto */}
-              <div className="col-span-full">
-                <label className="text-sm text-white mb-1 block">Cupom de Desconto</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={codigoCupom}
-                    onChange={e => setCodigoCupom(e.target.value)}
-                    className="input-gold flex-1"
-                    placeholder="Código do cupom"
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleValidarCupom}
-                    disabled={validandoCupom}
-                  >
-                    {validandoCupom ? 'Validando...' : 'Validar'}
-                  </button>
-                </div>
-                {cupomAplicado && (
-                  <div className="mt-2 p-3 bg-green-500/10 text-green-900 rounded">
-                    Cupom aplicado: {cupomAplicado.codigo} - Desconto: R$ {cupomAplicado.valorDesconto.toFixed(2)}
+              {/* Clientes (mantém funcionalidades existentes) */}
+              {activeTab === 'clientes' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold kv-accent">Meus Clientes</h3>
+                    <Button variant="gold" onClick={() => setShowNovoCliente(true)}>+ Novo Cliente</Button>
                   </div>
-                )}
-                {erroCupom && (
-                  <div className="mt-2 text-sm text-red-500">{erroCupom}</div>
-                )}
+
+                  {clientes.length === 0 ? (
+                    <div className="bg-card p-6 rounded">Nenhum cliente encontrado.</div>
+                  ) : (
+                    <div className="bg-card p-4 rounded space-y-2">
+                      {clientes.map(c => (
+                        <div key={c._id} className="flex items-center justify-between p-3 border-b border-white/6">
+                          <div>
+                            <div className="font-medium">{c.nome}</div>
+                            <div className="text-sm kv-muted">{c.email} • {c.cidade} - {c.estado}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm kv-muted">{c.telefone}</div>
+                            {/* Admin tem poder sobre todos os clientes; vendedor só sobre os seus próprios */}
+                            {(isAdmin || (userData && ((((c as any).vendedorId === userData.id) || ((c as any).vendedorId && (c as any).vendedorId._id === userData.id))))) ? (
+                              <>
+                                <Button variant="ghost" onClick={() => abrirEdicaoCliente(c)}>Editar</Button>
+                                <Button variant="primary" onClick={() => handleDeletarCliente(c._id)}>Excluir</Button>
+                              </>
+                            ) : (
+                              <div className="text-sm kv-muted">Sem acesso</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Formulários rápidos (novoPedido / novoCliente) - mantém a lógica existente, só adota classes visuais do admin */}
+              {activeTab === 'novoPedido' && (
+                <div className="bg-card p-4 rounded">
+                  <h2 className="text-lg text-white font-semibold mb-4">Novo Pedido</h2>
+
+                  <form onSubmit={handleFinalizarVenda} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    {/* Campos do cliente (CPF, nome, telefone) */}
+                    <div>
+                      <label className="text-sm text-white mb-1 block">CPF do Cliente</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={novoPedido.cpfCliente}
+                          onChange={e => setNovoPedido({ ...novoPedido, cpfCliente: e.target.value })}
+                          className="input-gold flex-1"
+                          placeholder="Digite o CPF"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => buscarClientePorCPF(novoPedido.cpfCliente)}
+                          disabled={buscandoCliente}
+                        >
+                          {buscandoCliente ? 'Buscando...' : 'Buscar'}
+                        </button>
+                      </div>
+                      {clienteSelecionado && (
+                        <div className="mt-2 p-3 bg-green-500/10 text-green-900 rounded">
+                          Cliente encontrado: {clienteSelecionado.nome} - {clienteSelecionado.telefone}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Nome do Cliente</label>
+                      <input
+                        type="text"
+                        value={novoPedido.nomeCliente}
+                        onChange={e => setNovoPedido({ ...novoPedido, nomeCliente: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Nome do Cliente"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Telefone do Cliente</label>
+                      <input
+                        type="text"
+                        value={novoPedido.telefoneCliente}
+                        onChange={e => setNovoPedido({ ...novoPedido, telefoneCliente: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Telefone do Cliente"
+                        required
+                      />
+                    </div>
+
+                    {/* Controles para adicionar item ao carrinho */}
+                    <div className="col-span-full grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm text-white mb-1 block">Categoria</label>
+                        <ComboBox
+                          options={categoriasUnicas.map(c => ({ value: c._id, label: c.name }))}
+                          value={itemAtual.categoria}
+                          onChange={handleSelectCategoria}
+                          placeholder="Selecione a categoria"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-white mb-1 block">Produto</label>
+                        <ComboBox
+                          options={produtosFiltrados.map(p => ({ value: p._id, label: p.name }))}
+                          value={itemAtual.produtoId}
+                          onChange={handleSelectProduto}
+                          placeholder="Selecione o produto"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-white mb-1 block">Tamanho</label>
+                        <ComboBox
+                          options={tamanhosDisponiveis.map(t => ({ value: t, label: t }))}
+                          value={itemAtual.tamanho}
+                          onChange={handleSelectTamanho}
+                          placeholder="Selecione o tamanho"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-white mb-1 block">Quantidade</label>
+                        <input type="number" min={1} value={itemAtual.quantidade} onChange={e => handleChangeQuantidade(Number(e.target.value || 1))} className="input-gold w-full" />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="text-sm text-white mb-1 block">Observações</label>
+                        <input type="text" value={itemAtual.observacoes} onChange={e => setItemAtual(prev => ({ ...prev, observacoes: e.target.value }))} className="input-gold w-full" placeholder="Ex: personalização, cor" />
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-white mb-1 block">Foto (opcional)</label>
+                        {/* input escondido acionado pelo botão */}
+                        <input ref={fotoInputRef} type="file" accept="image/*" onChange={e => handleFotoItemChange(e.target.files ? e.target.files[0] : undefined)} className="hidden" />
+                        <div className="flex items-center gap-3">
+                          <button type="button" className="btn btn-gold" onClick={() => fotoInputRef.current?.click()}>Adicionar foto</button>
+                          {fotoItemAtual && (
+                            <div className="flex items-center gap-2 text-sm text-white/80">
+                              <span>{fotoItemAtual.name}</span>
+                              <button type="button" className="text-white/60 hover:text-red-400" onClick={handleRemoveFotoItem}>✕</button>
+                            </div>
+                          )}
+                        </div>
+                        {previewFotoAtual && <img src={previewFotoAtual} alt="preview" className="mt-2 w-28 h-28 object-cover rounded" />}
+                      </div>
+
+                      <div className="flex items-end justify-end">
+                        <button type="button" className="btn btn-gold" onClick={handleAdicionarAoCarrinho}>Adicionar ao carrinho</button>
+                      </div>
+                    </div>
+
+                    {/* Itens do pedido (lista do carrinho) */}
+                    <div className="col-span-full">
+                      <label className="text-sm text-white mb-1 block">Itens do Pedido</label>
+                      <div className="bg-card p-4 rounded-lg border border-white/6">
+                        {carrinho.length === 0 ? (
+                          <div className="text-center text-white/50 py-6">Nenhum item no carrinho</div>
+                        ) : (
+                          <div className="space-y-3">
+                            {carrinho.map(item => (
+                              <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-900 rounded-lg">
+                                {item.previewFoto ? (
+                                  <img src={item.previewFoto} alt="thumb" className="w-20 h-20 object-cover rounded" />
+                                ) : (
+                                  <div className="w-20 h-20 bg-gray-800 rounded flex items-center justify-center text-white/60">No Img</div>
+                                )}
+
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="text-sm font-medium">{item.produtoNome}</div>
+                                      <div className="text-xs kv-muted">{item.categoria}</div>
+                                    </div>
+                                    <div className="text-sm font-semibold">R$ {item.precoTotal.toFixed(2)}</div>
+                                  </div>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <div className="text-xs badge-gold">Tamanho: {item.tamanho}</div>
+                                    <div className="text-xs badge-gold">Qtd: {item.quantidade}</div>
+                                    {item.observacoes && <div className="text-xs text-white/70">• {item.observacoes}</div>}
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col items-end gap-2">
+                                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRemoverDoCarrinho(item.id)}>Remover</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* resumo do carrinho */}
+                        <div className="mt-4 border-t border-white/6 pt-4 flex items-center justify-between">
+                          <div className="text-sm kv-muted">Subtotal</div>
+                          <div className="text-lg font-bold">R$ {totalCarrinho.toFixed(2)}</div>
+                        </div>
+                        {cupomAplicado && (
+                          <div className="mt-2 flex items-center justify-between text-sm text-green-200">
+                            <div>Desconto ({cupomAplicado.codigo})</div>
+                            <div>- R$ {cupomAplicado.valorDesconto.toFixed(2)}</div>
+                          </div>
+                        )}
+                        <div className="mt-2 flex items-center justify-between text-lg font-semibold">
+                          <div>Total</div>
+                          <div>R$ {totalFinal.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Total do pedido (alinhado à direita) */}
+                    <div className="col-span-full flex justify-end items-end">
+                      <div className="text-right">
+                        <div className="text-sm kv-muted">Total a pagar</div>
+                        <div className="text-2xl font-bold kv-accent">R$ {totalFinal.toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    <div className="col-span-full flex justify-end gap-2">
+                      <button className="btn btn-gold" type="submit">Finalizar Venda</button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setActiveTab("pedidos")}>Cancelar</button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {activeTab === 'novoCliente' && (
+                <div className="bg-card p-4 rounded">
+                  <h2 className="text-lg text-white font-semibold mb-4">Novo Cliente</h2>
+                  <form onSubmit={handleAtualizarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Nome</label>
+                      <input
+                        type="text"
+                        value={novoCliente.nome}
+                        onChange={e => setNovoCliente({ ...novoCliente, nome: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Nome do Cliente"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">CPF</label>
+                      <input
+                        type="text"
+                        value={novoCliente.cpf}
+                        onChange={e => setNovoCliente({ ...novoCliente, cpf: formatarCPF(e.target.value) })}
+                        className="input-gold w-full"
+                        placeholder="CPF do Cliente"
+                        maxLength={14}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">E-mail</label>
+                      <input
+                        type="email"
+                        value={novoCliente.email}
+                        onChange={e => setNovoCliente({ ...novoCliente, email: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="E-mail do Cliente"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Telefone</label>
+                      <input
+                        type="text"
+                        value={novoCliente.telefone}
+                        onChange={e => setNovoCliente({ ...novoCliente, telefone: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Telefone do Cliente"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Cidade</label>
+                      <input
+                        type="text"
+                        value={novoCliente.cidade}
+                        onChange={e => setNovoCliente({ ...novoCliente, cidade: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Cidade"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Estado</label>
+                      <input
+                        type="text"
+                        value={novoCliente.estado}
+                        onChange={e => setNovoCliente({ ...novoCliente, estado: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Estado"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Rua</label>
+                      <input
+                        type="text"
+                        value={novoCliente.rua}
+                        onChange={e => setNovoCliente({ ...novoCliente, rua: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Rua"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Número</label>
+                      <input
+                        type="text"
+                        value={novoCliente.numero}
+                        onChange={e => setNovoCliente({ ...novoCliente, numero: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Número"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">Bairro</label>
+                      <input
+                        type="text"
+                        value={novoCliente.bairro}
+                        onChange={e => setNovoCliente({ ...novoCliente, bairro: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="Bairro"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm text-white mb-1 block">CEP</label>
+                      <input
+                        type="text"
+                        value={novoCliente.cep}
+                        onChange={e => setNovoCliente({ ...novoCliente, cep: e.target.value })}
+                        className="input-gold w-full"
+                        placeholder="CEP"
+                        required
+                      />
+                    </div>
+
+                    <div className="col-span-full flex justify-end gap-2">
+                      <button className="btn btn-gold" type="submit">Salvar Cliente</button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setActiveTab("clientes")}>Cancelar</button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+            </section>
+          </main>
+        </div>
+      </div>
+
+      {/* Adiciona modal de visualização de pedido (quando viewingPedido definido) */}
+      {viewingPedido && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-md w-full max-w-2xl modal-responsive">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-semibold">Pedido — {viewingPedido.nomeCliente}</h3>
+                <div className="text-sm kv-muted">Criado em: {viewingPedido.createdAt ? new Date(viewingPedido.createdAt).toLocaleString() : '—'}</div>
+              </div>
+              <button className="text-white text-sm" onClick={handleCloseViewingPedido}>Fechar ✕</button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <div className="text-sm kv-muted">Produto</div>
+                <div className="font-medium">{viewingPedido.produtoId?.name || '—'}</div>
+                <div className="text-sm kv-muted mt-2">Quantidade: {viewingPedido.quantidade || '—'}</div>
+                <div className="text-sm kv-muted">Preço: R$ {viewingPedido.preco?.toFixed ? viewingPedido.preco.toFixed(2) : (viewingPedido.preco || '—')}</div>
               </div>
 
-              <div className="col-span-full flex justify-end gap-2">
-                <button className="btn btn-gold" type="submit">Finalizar Venda</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setActiveTab("pedidos")}>Cancelar</button>
+              <div>
+                <div className="text-sm kv-muted">Status</div>
+                <div className={`inline-block px-2 py-1 rounded text-white ${getStatusColor(viewingPedido.status)}`}>{viewingPedido.status}</div>
+
+                <div className="mt-4 text-sm kv-muted">Observações</div>
+                <div className="p-2 bg-gray-900 rounded mt-1 text-sm">{viewingPedido.observacoes || '—'}</div>
               </div>
-            </form>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              {isAdmin && viewingPedido.status === 'Pendente' && (
+                <>
+                  <Button variant="gold" onClick={() => { handleUpdatePedidoStatus(viewingPedido._id, 'Em Progresso'); handleCloseViewingPedido(); }}>Aceitar</Button>
+                  <Button variant="ghost" onClick={() => { if (confirm('Deseja recusar e cancelar este pedido?')) { handleUpdatePedidoStatus(viewingPedido._id, 'Cancelado'); handleCloseViewingPedido(); } }}>Recusar</Button>
+                </>
+              )}
+
+              <Button variant="ghost" onClick={handleCloseViewingPedido}>Fechar</Button>
+            </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {activeTab === "novoCliente" && (
-          <div className="bg-card p-4 rounded">
-            <h2 className="text-lg text-white font-semibold mb-4">Novo Cliente</h2>
+      {/* Modal para criar/editar trajeto (visível apenas para o vendedor logado) */}
+      {showNovoTrajeto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-md w-full max-w-2xl modal-responsive">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">{editTrajetoId ? 'Editar Trajeto' : 'Novo Trajeto'}</h3>
+              <button className="text-white text-sm" onClick={() => { setShowNovoTrajeto(false); setEditTrajetoId(null); }}>Fechar ✕</button>
+            </div>
 
-            <form onSubmit={handleAtualizarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={editTrajetoId ? handleSalvarTrajeto : handleCriarTrajeto} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-white mb-1 block">Nome</label>
-                <input
-                  type="text"
-                  value={novoCliente.nome}
-                  onChange={e => setNovoCliente({ ...novoCliente, nome: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Nome do Cliente"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">CPF</label>
-                <input
-                  type="text"
-                  value={novoCliente.cpf}
-                  onChange={e => setNovoCliente({ ...novoCliente, cpf: formatarCPF(e.target.value) })}
-                  className="input-gold w-full"
-                  placeholder="CPF do Cliente"
-                  maxLength={14}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">E-mail</label>
-                <input
-                  type="email"
-                  value={novoCliente.email}
-                  onChange={e => setNovoCliente({ ...novoCliente, email: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="E-mail do Cliente"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Telefone</label>
-                <input
-                  type="text"
-                  value={novoCliente.telefone}
-                  onChange={e => setNovoCliente({ ...novoCliente, telefone: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Telefone do Cliente"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Cidade</label>
-                <input
-                  type="text"
-                  value={novoCliente.cidade}
-                  onChange={e => setNovoCliente({ ...novoCliente, cidade: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Cidade"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Estado</label>
-                <input
-                  type="text"
-                  value={novoCliente.estado}
-                  onChange={e => setNovoCliente({ ...novoCliente, estado: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Estado"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Rua</label>
-                <input
-                  type="text"
-                  value={novoCliente.rua}
-                  onChange={e => setNovoCliente({ ...novoCliente, rua: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Rua"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Número</label>
-                <input
-                  type="text"
-                  value={novoCliente.numero}
-                  onChange={e => setNovoCliente({ ...novoCliente, numero: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Número"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-sm text-white mb-1 block">Bairro</label>
-                <input
-                  type="text"
-                  value={novoCliente.bairro}
-                  onChange={e => setNovoCliente({ ...novoCliente, bairro: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="Bairro"
-                  required
-                />
+                <label className="text-sm text-white mb-1 block">Nome do Cliente</label>
+                <input type="text" value={novoTrajeto.nomeCliente} onChange={e => setNovoTrajeto(prev => ({ ...prev, nomeCliente: e.target.value }))} className="input-gold w-full" required />
               </div>
 
               <div>
                 <label className="text-sm text-white mb-1 block">CEP</label>
-                <input
-                  type="text"
-                  value={novoCliente.cep}
-                  onChange={e => setNovoCliente({ ...novoCliente, cep: e.target.value })}
-                  className="input-gold w-full"
-                  placeholder="CEP"
-                  required
-                />
+                <div className="flex gap-2">
+                  <input type="text" value={novoTrajeto.cep} onChange={e => setNovoTrajeto(prev => ({ ...prev, cep: e.target.value }))} className="input-gold flex-1" />
+                  <button type="button" className="btn btn-primary" onClick={() => handleLookupCep(novoTrajeto.cep)}>Buscar CEP</button>
+                </div>
               </div>
 
-              <div className="col-span-full flex justify-end gap-2">
-                <button className="btn btn-gold" type="submit">Salvar Cliente</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setActiveTab("clientes")}>Cancelar</button>
+              <div>
+                <label className="text-sm text-white mb-1 block">Cidade</label>
+                <input type="text" value={novoTrajeto.cidade} onChange={e => setNovoTrajeto(prev => ({ ...prev, cidade: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Estado</label>
+                <input type="text" value={novoTrajeto.estado} onChange={e => setNovoTrajeto(prev => ({ ...prev, estado: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Rua</label>
+                <input type="text" value={novoTrajeto.rua} onChange={e => setNovoTrajeto(prev => ({ ...prev, rua: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Bairro</label>
+                <input type="text" value={novoTrajeto.bairro} onChange={e => setNovoTrajeto(prev => ({ ...prev, bairro: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Número</label>
+                <input type="text" value={novoTrajeto.numero} onChange={e => setNovoTrajeto(prev => ({ ...prev, numero: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Complemento</label>
+                <input type="text" value={novoTrajeto.complemento} onChange={e => setNovoTrajeto(prev => ({ ...prev, complemento: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Ponto de Referência</label>
+                <input type="text" value={novoTrajeto.pontoReferencia} onChange={e => setNovoTrajeto(prev => ({ ...prev, pontoReferencia: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Data da Visita</label>
+                <input type="date" value={novoTrajeto.dataVisita} onChange={e => setNovoTrajeto(prev => ({ ...prev, dataVisita: e.target.value }))} className="input-gold w-full" />
+              </div>
+
+              <div className="col-span-full flex justify-end gap-2 mt-4">
+                <button type="submit" className="btn btn-gold">{editTrajetoId ? 'Salvar Alterações' : 'Criar Trajeto'}</button>
+                <button type="button" className="btn btn-ghost" onClick={() => { setShowNovoTrajeto(false); setEditTrajetoId(null); }}>Cancelar</button>
               </div>
             </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Modal para criar cliente (visível apenas para o vendedor logado) */}
+      {showNovoCliente && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-md w-full max-w-2xl modal-responsive">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Novo Cliente</h3>
+              <button className="text-white text-sm" onClick={() => { setShowNovoCliente(false); setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' }); }}>Fechar ✕</button>
+            </div>
+
+            <form onSubmit={handleCriarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm text-white mb-1 block">Nome</label>
+                <input type="text" value={novoCliente.nome} onChange={e => setNovoCliente({ ...novoCliente, nome: e.target.value })} className="input-gold w-full" required />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">CPF</label>
+                <input type="text" value={novoCliente.cpf} onChange={e => setNovoCliente({ ...novoCliente, cpf: formatarCPF(e.target.value) })} className="input-gold w-full" maxLength={14} required />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">E-mail</label>
+                <input type="email" value={novoCliente.email} onChange={e => setNovoCliente({ ...novoCliente, email: e.target.value })} className="input-gold w-full" required />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Telefone</label>
+                <input type="text" value={novoCliente.telefone} onChange={e => setNovoCliente({ ...novoCliente, telefone: e.target.value })} className="input-gold w-full" required />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Cidade</label>
+                <input type="text" value={novoCliente.cidade} onChange={e => setNovoCliente({ ...novoCliente, cidade: e.target.value })} className="input-gold w-full" />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Estado</label>
+                <input type="text" value={novoCliente.estado} onChange={e => setNovoCliente({ ...novoCliente, estado: e.target.value })} className="input-gold w-full" />
+              </div>
+
+              <div className="col-span-full flex justify-end gap-2 mt-4">
+                <button type="submit" className="btn btn-gold">Criar Cliente</button>
+                <button type="button" className="btn btn-ghost" onClick={() => { setShowNovoCliente(false); setNovoCliente({ nome: '', cpf: '', email: '', telefone: '', cidade: '', estado: '', rua: '', numero: '', bairro: '', cep: '', complemento: '' }); }}>Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para editar cliente (abre quando mostrarModalEdicao true) */}
+      {mostrarModalEdicao && clienteEditando && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-md w-full max-w-2xl modal-responsive">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Editar Cliente</h3>
+              <button className="text-white text-sm" onClick={() => { setMostrarModalEdicao(false); setClienteEditando(null); }}>Fechar ✕</button>
+            </div>
+
+            <form onSubmit={handleAtualizarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm text-white mb-1 block">Nome</label>
+                <input type="text" value={clienteEditando.nome} onChange={e => setClienteEditando((prev: Cliente | null) => prev ? ({ ...prev, nome: e.target.value }) : prev)} className="input-gold w-full" required />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">CPF</label>
+                <input type="text" value={clienteEditando.cpf} onChange={e => setClienteEditando((prev: Cliente | null) => prev ? ({ ...prev, cpf: formatarCPF(e.target.value) }) : prev)} className="input-gold w-full" maxLength={14} required />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">E-mail</label>
+                <input type="email" value={clienteEditando.email} onChange={e => setClienteEditando((prev: Cliente | null) => prev ? ({ ...prev, email: e.target.value }) : prev)} className="input-gold w-full" required />
+              </div>
+
+              <div>
+                <label className="text-sm text-white mb-1 block">Telefone</label>
+                <input type="text" value={clienteEditando.telefone} onChange={e => setClienteEditando((prev: Cliente | null) => prev ? ({ ...prev, telefone: e.target.value }) : prev)} className="input-gold w-full" required />
+              </div>
+
+              <div className="col-span-full flex justify-end gap-2 mt-4">
+                <button type="submit" className="btn btn-gold">Salvar Cliente</button>
+                <button type="button" className="btn btn-ghost" onClick={() => { setMostrarModalEdicao(false); setClienteEditando(null); }}>Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -164,3 +164,55 @@ h1, h2, h3 {
 /* Small spacing helpers */
 .mt-2-sm { margin-top: 0.5rem; }
 .p-4-sm { padding: 1rem; }
+
+/* ===== Ajustes responsivos globais (melhorar interação em mobile/tablet) ===== */
+@media (max-width: 1024px) {
+  .container-responsive { padding-left: 0.75rem; padding-right: 0.75rem; }
+  /* diminuir padding dos cards em telas médias/pequenas */
+  .bg-card { padding: 0.75rem; }
+  /* modais com largura limitada no desktop tornam-se fluidos em mobile */
+  .max-w-2xl { max-width: 90vw !important; }
+}
+
+@media (max-width: 640px) {
+  /* Botões ocupam largura total para facilitar toque */
+  .btn-gold, .btn-ghost, .btn-cta, .button-primary { display: block; width: 100%; text-align: center; padding-left: 0.75rem; padding-right: 0.75rem; }
+
+  /* Inputs ocupam largura total e usam box-sizing para evitar overflow */
+  .input-gold { width: 100%; box-sizing: border-box; }
+
+  /* Badges menores */
+  .badge-gold { font-size: 0.65rem; padding: 0.18rem 0.4rem; }
+
+  /* Imagens e previews responsivos */
+  img { max-width: 100%; height: auto; }
+  .w-28 { width: 5.5rem !important; height: 5.5rem !important; }
+
+  /* Torna cartões roláveis quando o conteúdo excede a tela */
+  .bg-card { overflow: auto; }
+
+  /* Grid principal: empilhar colunas em telas pequenas */
+  .grid-cols-1-sm { grid-template-columns: 1fr !important; }
+
+  /* Modais com padding reduzido e largura fluida */
+  .modal-responsive { max-width: 94vw !important; padding: 1rem !important; }
+}
+
+/* Segurança: garantir que elementos com max-w classes usados em JSX sejam fluidos em telas pequenas */
+@media (max-width: 480px) {
+  .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl { max-width: 94vw !important; }
+}
+
+/* Pequenos ajustes no layout do sidebar para telas pequenas (apenas visual) */
+@media (max-width: 1024px) {
+  /* quando a sidebar fica no topo por causa do grid, reduzir padding e aumentar click targets */
+  .sidebar-mobile-compact { padding: 0.5rem; }
+  .sidebar-mobile-compact .btn { padding: 0.6rem 0.75rem; }
+}
+
+/* Fallbacks para touch targets */
+@media (hover: none) and (pointer: coarse) {
+  .btn-gold, .btn-ghost, .btn-cta { padding: 0.9rem 1rem; }
+}
+
+/* ===== fim ajustes responsivos ===== */

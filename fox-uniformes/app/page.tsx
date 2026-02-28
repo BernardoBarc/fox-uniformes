@@ -98,13 +98,11 @@ export default function loginPage() {
         <div className="flex flex-col gap-6">
           <div className="kv-accent text-4xl font-extrabold">Fox Uniformes</div>
           <p className="kv-muted max-w-lg">Painel administrativo seguro para gerenciar pedidos, clientes e rotas. Acesse suas cobranças e notas de forma rápida.</p>
-
           <div className="mt-6 flex gap-3">
-            {/* botões removidos conforme solicitado */}
           </div>
         </div>
 
-        <div className="login-card" role="region" aria-label="Formulário de login">
+        <div className="login-card modal-responsive" role="region" aria-label="Formulário de login">
           <div className="flex flex-col items-center mb-4">
             <img src="/logoAmarelo.png" alt="Fox Uniformes" className="w-16 h-16 rounded-full object-cover" onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { const img = e.currentTarget as HTMLImageElement; if (!img.getAttribute('data-fallback')) { img.setAttribute('data-fallback', '1'); img.src = '/logoBranco.png'; } }} />
             <div className="text-sm kv-muted mt-2">Painel Administrativo</div>
